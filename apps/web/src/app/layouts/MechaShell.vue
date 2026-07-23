@@ -616,12 +616,18 @@ defineExpose({ openSidebar, closeSidebar, scrollToCategory })
 .side-item {
   display: flex;
   align-items: stretch;
+  /* always reserve border box to avoid layout jump */
   border: 1px solid transparent;
   border-radius: var(--radius-sm);
+  background: transparent;
+  /* no box-shadow transition — prevents selected-state jitter */
+  transition: background-color 0.12s ease, border-color 0.12s ease, color 0.12s ease;
 }
 .side-item--active {
-  background: var(--bg-panel);
-  border-color: var(--stroke-dim);
+  background: rgba(14, 28, 44, 0.85);
+  border-color: rgba(94, 240, 255, 0.28);
+  /* fixed inset highlight instead of expanding outer glow */
+  box-shadow: inset 0 0 0 1px rgba(94, 240, 255, 0.08);
 }
 .side-item__main {
   flex: 1;
@@ -647,10 +653,12 @@ defineExpose({ openSidebar, closeSidebar, scrollToCategory })
   flex-shrink: 0;
   background: transparent;
   border-radius: 1px;
+  /* no shadow — color only, no size change */
+  transition: background-color 0.12s ease;
 }
 .side-item--active .side-item__bar {
-  background: var(--glow-cyan);
-  box-shadow: var(--glow-sm);
+  background: var(--energy);
+  box-shadow: none;
 }
 .side-item__label {
   flex: 1;

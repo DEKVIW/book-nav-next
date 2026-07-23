@@ -2,8 +2,8 @@
 import { computed, ref, watch } from 'vue'
 import { RouterLink, RouterView, useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/shared/stores/auth'
-import AdminIcon from './AdminIcon.vue'
-import type { IconName } from './AdminIcons'
+import MechaIcon from '@/shared/ui/MechaIcon.vue'
+import type { MechaIconName } from '@/shared/mecha/icons'
 
 const auth = useAuthStore()
 const route = useRoute()
@@ -21,7 +21,7 @@ watch(
   },
 )
 
-type NavItem = { to: string; label: string; icon: IconName; super?: boolean }
+type NavItem = { to: string; label: string; icon: MechaIconName; super?: boolean }
 
 const menuItems = computed<NavItem[]>(() => [
   { to: '/admin/settings', label: '站点设置', icon: 'gear', super: true },
@@ -89,7 +89,7 @@ async function logout() {
           aria-label="菜单"
           @click="mobileOpen = !mobileOpen"
         >
-          <AdminIcon name="list" :size="20" />
+          <MechaIcon name="list" :size="20" />
         </button>
         <RouterLink to="/admin" class="admin-brand">后台管理</RouterLink>
         <span class="admin-topbar__sep">/</span>
@@ -97,11 +97,11 @@ async function logout() {
       </div>
       <div class="admin-topbar__right">
         <RouterLink class="admin-top-link" to="/" title="前台">
-          <AdminIcon name="house" :size="16" />
+          <MechaIcon name="house" :size="16" />
           <span class="admin-top-link__text">前台</span>
         </RouterLink>
         <RouterLink class="admin-top-link" to="/admin/jobs" title="任务">
-          <AdminIcon name="activity" :size="16" />
+          <MechaIcon name="activity" :size="16" />
           <span class="admin-top-link__text">任务</span>
         </RouterLink>
         <div class="admin-user" :title="auth.user?.email">
@@ -109,7 +109,7 @@ async function logout() {
           <span class="admin-user__name">{{ auth.user?.username }}</span>
         </div>
         <button type="button" class="admin-top-link" @click="logout">
-          <AdminIcon name="box-arrow-right" :size="16" />
+          <MechaIcon name="box-arrow-right" :size="16" />
           <span class="admin-top-link__text">退出</span>
         </button>
       </div>
@@ -123,7 +123,7 @@ async function logout() {
           :class="{ active: isActive('/admin') }"
           title="仪表盘"
         >
-          <AdminIcon name="speedometer" :size="18" />
+          <MechaIcon name="speedometer" :size="18" />
           <span class="admin-nav-text">仪表盘</span>
         </RouterLink>
       </div>
@@ -137,12 +137,11 @@ async function logout() {
           :class="{ active: isActive(item.to) }"
           :title="item.label"
         >
-          <AdminIcon :name="item.icon" :size="18" />
+          <MechaIcon :name="item.icon" :size="18" />
           <span class="admin-nav-text">{{ item.label }}</span>
         </RouterLink>
       </nav>
 
-      <!-- 收起固定底部（与前台一致） -->
       <div class="admin-sidebar__foot">
         <button
           type="button"
@@ -150,7 +149,7 @@ async function logout() {
           :title="collapsed ? '展开' : '收起'"
           @click="collapsed = !collapsed"
         >
-          <AdminIcon :name="collapsed ? 'chevron-right' : 'chevron-left'" :size="16" />
+          <MechaIcon :name="collapsed ? 'chevron-right' : 'chevron-left'" :size="16" />
           <span class="admin-nav-text">{{ collapsed ? '展开' : '收起' }}</span>
         </button>
       </div>

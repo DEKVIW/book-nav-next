@@ -226,17 +226,21 @@
   color: #a7b1c2;
   text-decoration: none;
   font-size: 13.5px;
+  /* always reserve left rail to avoid jitter */
   border-left: 3px solid transparent;
-  transition: color 0.15s, background 0.15s, border-color 0.15s;
+  box-shadow: none;
+  transition: color 0.12s ease, background-color 0.12s ease, border-color 0.12s ease;
 }
 .admin-nav-link:hover {
   color: #fff;
   background: rgba(255, 255, 255, 0.05);
 }
 .admin-nav-link.active {
-  color: #fff;
-  background: rgba(255, 255, 255, 0.06);
+  color: #e8f4ff;
+  background: rgba(110, 142, 251, 0.12);
   border-left-color: var(--console-primary);
+  /* no outer shadow — prevents selected flicker */
+  box-shadow: none;
 }
 .admin-nav-link--dash {
   font-weight: 600;

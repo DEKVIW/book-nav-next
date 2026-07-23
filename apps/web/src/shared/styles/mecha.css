@@ -1,71 +1,59 @@
 /**
- * Mecha HUD primitives — Transformers-inspired ORIGINAL language (medium intensity).
+ * Mecha HUD — atmosphere + structure
  */
 
-/* —— Page void: layered depth + faint hangar atmosphere —— */
+/* —— Page void + visible hangar scene (readable, not wallpaper-loud) —— */
 .mecha-void {
   position: relative;
   min-height: 100vh;
-  background-color: var(--bg-void);
+  background-color: #050a12;
   background-image:
-    radial-gradient(ellipse 120% 80% at 50% -20%, rgba(40, 90, 140, 0.14), transparent 55%),
-    radial-gradient(ellipse 80% 50% at 100% 100%, rgba(20, 60, 90, 0.1), transparent 50%),
-    linear-gradient(rgba(90, 150, 200, 0.04) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(90, 150, 200, 0.04) 1px, transparent 1px),
-    radial-gradient(rgba(100, 160, 220, 0.045) 0.6px, transparent 0.7px);
-  background-size:
-    auto,
-    auto,
-    48px 48px,
-    48px 48px,
-    16px 16px;
+    radial-gradient(ellipse 100% 70% at 50% -10%, rgba(50, 110, 170, 0.22), transparent 55%),
+    radial-gradient(ellipse 70% 45% at 90% 90%, rgba(80, 50, 140, 0.12), transparent 50%),
+    linear-gradient(rgba(100, 160, 220, 0.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(100, 160, 220, 0.05) 1px, transparent 1px);
+  background-size: auto, auto, 56px 56px, 56px 56px;
   background-attachment: fixed;
 }
 
-/* Faint “hangar / city” atmosphere — pure CSS, no IP art */
+/* Scene plate — real SVG atmosphere */
 .mecha-void::before {
   content: '';
   pointer-events: none;
   position: fixed;
   inset: 0;
   z-index: 0;
-  opacity: 0.11;
-  background:
-    /* distant structure blocks */
-    linear-gradient(105deg, transparent 40%, rgba(61, 231, 255, 0.06) 40.5%, transparent 41%),
-    linear-gradient(75deg, transparent 62%, rgba(179, 136, 255, 0.05) 62.5%, transparent 63%),
-    /* ground plane glow */
-    radial-gradient(ellipse 90% 40% at 50% 110%, rgba(61, 231, 255, 0.12), transparent 55%),
-    /* horizon band */
-    linear-gradient(180deg, transparent 58%, rgba(20, 40, 70, 0.35) 72%, transparent 88%);
+  opacity: 0.38;
+  background-image: url('/mecha/bg/atmosphere.svg');
+  background-size: cover;
+  background-position: center bottom;
+  background-repeat: no-repeat;
   background-attachment: fixed;
 }
+
+/* Soft vignette so content stays readable */
 .mecha-void::after {
   content: '';
   pointer-events: none;
   position: fixed;
   inset: 0;
   z-index: 0;
-  opacity: 0.07;
-  background-image:
-    repeating-linear-gradient(
-      -18deg,
-      transparent,
-      transparent 80px,
-      rgba(100, 160, 220, 0.04) 80px,
-      rgba(100, 160, 220, 0.04) 81px
-    );
-  background-attachment: fixed;
+  background:
+    radial-gradient(ellipse 75% 70% at 50% 40%, transparent 20%, rgba(4, 8, 14, 0.55) 100%),
+    linear-gradient(180deg, rgba(5, 10, 18, 0.25) 0%, transparent 30%, rgba(5, 10, 18, 0.45) 100%);
 }
+
 .mecha-void > * {
   position: relative;
   z-index: 1;
 }
 
-/* Admin shell stays darker / less atmosphere noise */
-.admin-shell.mecha-void::before,
+/* Admin: lighter atmosphere so tables stay crisp */
+.admin-shell.mecha-void::before {
+  opacity: 0.14;
+}
 .admin-shell.mecha-void::after {
-  opacity: 0.04;
+  background: radial-gradient(ellipse 80% 70% at 50% 30%, transparent 30%, rgba(5, 10, 18, 0.65) 100%);
 }
 
 /* —— Hull panel frame —— */

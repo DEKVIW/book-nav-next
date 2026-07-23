@@ -1,11 +1,13 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 280" fill="none">
-  <g fill="#0a0e14" opacity="0.95">
-    <path d="M95 30 L110 18 L125 40 L118 70 L95 62 Z"/>
-    <path d="M70 55 L115 45 L145 70 L150 110 L120 125 L75 105 Z"/>
-    <path d="M20 95 L70 85 L85 115 L55 145 L15 130 Z"/>
-    <path d="M150 70 L185 55 L190 90 L155 115 L140 95 Z"/>
-    <path d="M90 120 L125 115 L135 175 L100 195 L85 160 Z"/>
-    <path d="M95 185 L118 195 L125 255 L98 265 L88 230 Z"/>
-    <path d="M70 100 L90 115 L82 150 L58 140 Z"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 160" fill="none">
+  <!-- aerial: wing + cockpit crop, dynamic -->
+  <g fill="#d4b8ff" fill-opacity="0.92">
+    <path d="M70 36 L90 20 L110 40 L102 62 L78 58 Z"/>
+    <path d="M18 58 L70 48 L100 62 L108 90 L78 102 L40 88 Z"/>
+    <path d="M100 40 L148 22 L154 48 L118 72 L104 58 Z"/>
+    <path d="M72 98 L102 92 L112 140 L84 150 L70 122 Z"/>
+    <path d="M48 70 L68 82 L62 110 L40 100 Z"/>
+  </g>
+  <g fill="#f3eaff" fill-opacity="0.35">
+    <path d="M82 42 L94 34 L100 48 L88 54 Z"/>
   </g>
 </svg>

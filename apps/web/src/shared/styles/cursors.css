@@ -1,9 +1,24 @@
 /**
- * Global cursors — mecha UI consistency
- * pointer / text / not-allowed / grab + crosshair for precision targets
+ * Mecha custom cursors (SVG hotspots)
+ * Fallback chain → system cursors
  */
 
-/* —— Clickable —— */
+:root {
+  --cursor-default: url('/mecha/cursors/default.svg') 4 2, default;
+  --cursor-pointer: url('/mecha/cursors/pointer.svg') 6 2, pointer;
+  --cursor-text: url('/mecha/cursors/text.svg') 11 16, text;
+  --cursor-grab: url('/mecha/cursors/grab.svg') 12 12, grab;
+  --cursor-grabbing: url('/mecha/cursors/grab.svg') 12 12, grabbing;
+  --cursor-not-allowed: url('/mecha/cursors/not-allowed.svg') 16 16, not-allowed;
+}
+
+html,
+body,
+.mecha-void {
+  cursor: var(--cursor-default);
+}
+
+/* Clickable */
 button:not(:disabled),
 [type='button']:not(:disabled),
 [type='submit']:not(:disabled),
@@ -29,78 +44,55 @@ label[for],
 .site-card,
 .c-tabs__item,
 .c-btn:not(:disabled),
-.entry-card {
-  cursor: pointer;
+.entry-card,
+.ann-close,
+.side-rail__close,
+.console-icon-btn,
+.admin-icon-btn {
+  cursor: var(--cursor-pointer);
 }
 
-/* 文本输入 */
+/* Text */
 input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='color']):not([type='file']):not([type='button']):not([type='submit']):not([type='reset']),
 textarea,
 [contenteditable='true'] {
-  cursor: text;
+  cursor: var(--cursor-text);
 }
 
-/* 复选 / 单选 */
 input[type='checkbox'],
 input[type='radio'],
 .m-tab input,
-.ai-toggle input {
-  cursor: pointer;
+.ai-toggle input,
+select {
+  cursor: var(--cursor-pointer);
 }
 
-/* 下拉 */
-select,
-.m-input[type='color'] {
-  cursor: pointer;
-}
-
-/* 禁用 */
+/* Disabled */
 button:disabled,
 .m-btn:disabled,
 input:disabled,
 select:disabled,
 textarea:disabled,
 [aria-disabled='true'],
-.admin-nav-item:disabled {
-  cursor: not-allowed !important;
+.c-btn:disabled {
+  cursor: var(--cursor-not-allowed) !important;
 }
 
-/* 拖拽卡片 */
+/* Drag cards */
 .site-card--drag,
 .site-card[draggable='true'] {
-  cursor: grab;
+  cursor: var(--cursor-grab);
 }
 .site-card--drag:active,
 .site-card[draggable='true']:active {
-  cursor: grabbing;
+  cursor: var(--cursor-grabbing);
 }
 
-/* 链接默认 pointer；纯文本链接也要 */
-a {
-  cursor: pointer;
-}
-
-/* Table row clickable */
 .admin-table tbody tr[data-clickable],
 .c-table tbody tr[data-clickable] {
-  cursor: pointer;
+  cursor: var(--cursor-pointer);
 }
 
-/* Resize */
 textarea {
-  cursor: text;
   resize: vertical;
-}
-
-/* Modal close / icon buttons feel precise */
-.ann-close,
-.side-rail__close,
-.console-icon-btn,
-.admin-icon-btn {
-  cursor: pointer;
-}
-
-/* Links in dark UI */
-.mecha-void a[href]:hover {
-  cursor: pointer;
 }

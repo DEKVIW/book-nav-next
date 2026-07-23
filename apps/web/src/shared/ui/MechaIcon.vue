@@ -10,7 +10,9 @@ const props = withDefaults(
   { size: 18 },
 )
 
-const d = computed(() => MECHA_ICON_PATHS[props.name as MechaIconName] || MECHA_ICON_PATHS.bolt)
+const d = computed(
+  () => MECHA_ICON_PATHS[props.name as MechaIconName] || MECHA_ICON_PATHS.bolt,
+)
 </script>
 
 <template>

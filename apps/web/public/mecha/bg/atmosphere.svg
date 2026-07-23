@@ -1,0 +1,48 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1920 1080" preserveAspectRatio="xMidYMid slice">
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#0a1a2e"/>
+      <stop offset="55%" stop-color="#071018"/>
+      <stop offset="100%" stop-color="#04080f"/>
+    </linearGradient>
+    <linearGradient id="glow" x1="0.5" y1="1" x2="0.5" y2="0">
+      <stop offset="0%" stop-color="#3de7ff" stop-opacity="0.25"/>
+      <stop offset="45%" stop-color="#3de7ff" stop-opacity="0"/>
+    </linearGradient>
+    <linearGradient id="struct" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#5ec8ff" stop-opacity="0"/>
+      <stop offset="50%" stop-color="#5ec8ff" stop-opacity="0.35"/>
+      <stop offset="100%" stop-color="#5ec8ff" stop-opacity="0"/>
+    </linearGradient>
+  </defs>
+  <rect width="1920" height="1080" fill="url(#sky)"/>
+  <!-- ground glow -->
+  <ellipse cx="960" cy="1080" rx="900" ry="280" fill="url(#glow)"/>
+  <!-- distant hangar silhouettes -->
+  <g fill="#1a3048" fill-opacity="0.55">
+    <path d="M0 720 L120 640 L180 720 L220 600 L320 720 L400 580 L520 720 L600 620 L720 720 L800 560 L920 720 L1000 640 L1120 720 L1200 600 L1320 720 L1400 640 L1520 720 L1600 580 L1720 720 L1800 650 L1920 720 L1920 1080 L0 1080 Z"/>
+  </g>
+  <g fill="#243a55" fill-opacity="0.4">
+    <path d="M80 780 L200 700 L280 780 L360 680 L480 780 L560 720 L680 780 L760 700 L900 780 L980 710 L1120 780 L1240 690 L1380 780 L1500 720 L1640 780 L1760 700 L1920 780 L1920 1080 L0 1080 L0 820 Z"/>
+  </g>
+  <!-- energy beams -->
+  <g stroke="#3de7ff" stroke-opacity="0.18" stroke-width="2">
+    <path d="M200 900 L280 500"/>
+    <path d="M600 950 L640 420"/>
+    <path d="M1100 980 L1180 380"/>
+    <path d="M1500 920 L1560 460"/>
+  </g>
+  <!-- grid floor -->
+  <g stroke="#5ec8ff" stroke-opacity="0.08" stroke-width="1">
+    <path d="M0 820 H1920"/><path d="M0 880 H1920"/><path d="M0 940 H1920"/><path d="M0 1000 H1920"/>
+    <path d="M200 780 V1080"/><path d="M480 780 V1080"/><path d="M760 780 V1080"/>
+    <path d="M1040 780 V1080"/><path d="M1320 780 V1080"/><path d="M1600 780 V1080"/>
+  </g>
+  <!-- floating structure hints -->
+  <g fill="#3de7ff" fill-opacity="0.06">
+    <rect x="140" y="200" width="220" height="12" transform="skewX(-20)"/>
+    <rect x="1480" y="160" width="280" height="10" transform="skewX(-15)"/>
+    <rect x="700" y="120" width="160" height="8" transform="skewX(12)"/>
+  </g>
+  <rect width="1920" height="1080" fill="url(#struct)" opacity="0.15"/>
+</svg>

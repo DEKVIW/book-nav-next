@@ -1,13 +1,13 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 280" fill="none">
-  <g fill="#0a0e14" opacity="0.95">
-    <path d="M88 18 L100 6 L112 18 L118 40 L100 48 L82 40 Z"/>
-    <path d="M70 45 L100 35 L130 45 L135 90 L100 100 L65 90 Z"/>
-    <path d="M55 88 L75 95 L72 165 L52 155 Z"/>
-    <path d="M145 88 L125 95 L128 165 L148 155 Z"/>
-    <path d="M78 100 L100 92 L122 100 L120 170 L100 180 L80 170 Z"/>
-    <path d="M78 170 L98 178 L95 250 L72 258 L68 220 Z"/>
-    <path d="M122 170 L102 178 L105 250 L128 258 L132 220 Z"/>
-    <path d="M48 80 L68 92 L62 120 L38 108 Z"/>
-    <path d="M152 80 L132 92 L138 120 L162 108 Z"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 160" fill="none">
+  <!-- scout: lean upper body crop -->
+  <g fill="#ffd080" fill-opacity="0.92">
+    <path d="M68 14 L80 4 L92 14 L96 34 L80 42 L64 34 Z"/>
+    <path d="M42 40 L80 28 L118 40 L124 72 L100 88 L80 78 L60 88 L36 72 Z"/>
+    <path d="M30 68 L52 78 L50 118 L28 108 Z"/>
+    <path d="M130 68 L108 78 L110 118 L132 108 Z"/>
+    <path d="M58 88 L80 80 L102 88 L100 140 L80 150 L60 140 Z"/>
+  </g>
+  <g fill="#fff6e0" fill-opacity="0.35">
+    <path d="M74 24 L80 18 L86 24 L84 34 L76 34 Z"/>
   </g>
 </svg>

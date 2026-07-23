@@ -679,7 +679,10 @@ function scrollTop() {
 }
 .card-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  /* fixed row rhythm — cards must not stretch grid by art */
+  grid-auto-rows: 96px;
+  align-items: stretch;
   gap: 14px;
 }
 .empty-hint {

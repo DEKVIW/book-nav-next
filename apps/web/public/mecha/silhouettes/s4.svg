@@ -1,13 +1,13 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 280" fill="none">
-  <g fill="#0a0e14" opacity="0.95">
-    <path d="M85 20 L100 10 L115 20 L120 42 L100 50 L80 42 Z"/>
-    <path d="M65 48 L100 38 L135 48 L140 95 L100 108 L60 95 Z"/>
-    <path d="M55 92 L75 105 L70 175 L48 165 Z"/>
-    <path d="M145 92 L125 105 L130 175 L152 165 Z"/>
-    <path d="M75 108 L100 100 L125 108 L128 175 L100 188 L72 175 Z"/>
-    <path d="M75 175 L98 185 L94 250 L70 258 L66 220 Z"/>
-    <path d="M125 175 L102 185 L106 250 L130 258 L134 220 Z"/>
-    <path d="M130 95 L155 85 L185 100 L175 130 L145 125 L135 110 Z"/>
-    <path d="M175 100 L195 115 L190 145 L168 135 Z"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 160" fill="none">
+  <!-- engineer: torso + tool arm crop -->
+  <g fill="#7dffc8" fill-opacity="0.92">
+    <path d="M64 16 L80 6 L96 16 L100 36 L80 44 L60 36 Z"/>
+    <path d="M40 42 L80 30 L120 42 L126 78 L100 94 L80 84 L60 94 L34 78 Z"/>
+    <path d="M34 72 L54 84 L52 122 L30 112 Z"/>
+    <path d="M106 70 L126 58 L152 72 L144 100 L118 98 L108 84 Z"/>
+    <path d="M58 92 L80 84 L102 92 L104 140 L80 150 L56 140 Z"/>
+  </g>
+  <g fill="#e8fff6" fill-opacity="0.32">
+    <path d="M72 26 L80 18 L88 26 L86 36 L74 36 Z"/>
   </g>
 </svg>

@@ -1,12 +1,13 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 280" fill="none">
-  <g fill="#0a0e14" opacity="0.95">
-    <path d="M95 55 L108 42 L125 58 L120 78 L100 72 Z"/>
-    <path d="M55 75 L100 60 L140 80 L145 120 L100 135 L55 115 Z"/>
-    <path d="M40 110 L70 125 L95 160 L70 185 L40 165 Z"/>
-    <path d="M145 115 L165 100 L175 130 L150 155 L135 140 Z"/>
-    <path d="M70 155 L100 145 L125 165 L115 210 L80 200 Z"/>
-    <path d="M75 200 L105 210 L100 255 L70 250 Z"/>
-    <path d="M110 205 L130 195 L145 235 L120 245 Z"/>
-    <path d="M30 95 L50 105 L45 130 L22 120 Z"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 160" fill="none">
+  <!-- shadow: crouch/action upper crop -->
+  <g fill="#c5d0e8" fill-opacity="0.92">
+    <path d="M78 40 L96 28 L112 46 L106 66 L84 60 Z"/>
+    <path d="M36 62 L80 48 L124 68 L130 100 L96 118 L52 102 Z"/>
+    <path d="M28 90 L56 104 L78 132 L52 148 L28 128 Z"/>
+    <path d="M118 92 L140 78 L150 104 L128 124 L112 112 Z"/>
+    <path d="M70 118 L98 110 L112 148 L82 156 L68 138 Z"/>
+  </g>
+  <g fill="#f0f4ff" fill-opacity="0.3">
+    <path d="M88 48 L100 40 L106 52 L94 58 Z"/>
   </g>
 </svg>

@@ -1,13 +1,14 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 280" fill="none">
-  <g fill="#0a0e14" opacity="0.95">
-    <path d="M78 22 L100 8 L122 22 L130 48 L118 58 L100 50 L82 58 L70 48 Z"/>
-    <path d="M55 55 L100 42 L145 55 L155 95 L140 120 L100 105 L60 120 L45 95 Z"/>
-    <path d="M40 100 L70 115 L65 200 L48 210 L35 175 Z"/>
-    <path d="M160 100 L130 115 L135 200 L152 210 L165 175 Z"/>
-    <path d="M72 118 L100 108 L128 118 L132 175 L100 190 L68 175 Z"/>
-    <path d="M70 175 L95 188 L92 255 L68 268 L58 240 Z"/>
-    <path d="M130 175 L105 188 L108 255 L132 268 L142 240 Z"/>
-    <path d="M28 95 L48 105 L42 130 L18 125 Z"/>
-    <path d="M172 95 L152 105 L158 130 L182 125 Z"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 160" fill="none">
+  <!-- prime: upper torso + head + shoulder (recognizable crop, top-right card) -->
+  <g fill="#7ef9ff" fill-opacity="0.92">
+    <path d="M62 18 L80 6 L98 18 L104 42 L80 52 L56 42 Z"/>
+    <path d="M28 48 L80 32 L132 48 L140 78 L118 98 L80 86 L42 98 L20 78 Z"/>
+    <path d="M18 72 L48 88 L44 128 L16 118 Z"/>
+    <path d="M142 72 L112 88 L116 128 L144 118 Z"/>
+    <path d="M52 92 L80 82 L108 92 L112 140 L80 152 L48 140 Z"/>
+  </g>
+  <g fill="#e8fbff" fill-opacity="0.35">
+    <path d="M72 28 L80 20 L88 28 L86 40 L74 40 Z"/>
+    <path d="M70 70 L90 62 L96 78 L76 86 Z"/>
   </g>
 </svg>
