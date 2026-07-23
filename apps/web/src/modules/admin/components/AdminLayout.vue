@@ -75,7 +75,7 @@ async function logout() {
 
 <template>
   <div
-    class="admin-shell"
+    class="admin-shell mecha-void"
     :class="{
       'admin-shell--collapsed': collapsed,
       'admin-shell--mobile-open': mobileOpen,

@@ -1,8 +1,4 @@
 <script setup lang="ts">
-/**
- * 公告弹窗 — 对齐旧站「弹层公告 + N 天不再显示」
- * content 支持 HTML（消毒后渲染）
- */
 import { computed, onMounted, ref, watch } from 'vue'
 import { sanitizeHtml, looksLikeHtml } from '@/shared/utils/sanitizeHtml'
 
@@ -67,7 +63,6 @@ watch(
           <span class="c-tl" /><span class="c-tr" /><span class="c-bl" /><span class="c-br" />
         </div>
         <header class="ann-head">
-          <p class="hud-label">NOTICE</p>
           <h2>{{ title || '公告' }}</h2>
           <button type="button" class="ann-close" aria-label="关闭" @click="dismiss(false)">×</button>
         </header>

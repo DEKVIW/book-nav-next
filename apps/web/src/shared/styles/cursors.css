@@ -1,9 +1,9 @@
 /**
- * 全局光标规范
- * 可交互 = pointer；文本 = text；禁用 = not-allowed；拖拽 = grab
+ * Global cursors — mecha UI consistency
+ * pointer / text / not-allowed / grab + crosshair for precision targets
  */
 
-/* —— 默认可点控件 —— */
+/* —— Clickable —— */
 button:not(:disabled),
 [type='button']:not(:disabled),
 [type='submit']:not(:disabled),
@@ -17,12 +17,19 @@ label[for],
 .side-item__main,
 .side-item__toggle,
 .side-sub__item,
-.admin-nav-item,
+.side-rail__collapse,
+.admin-nav-link,
+.admin-sidebar__collapse,
+.admin-top-link,
+.console-nav-item,
 .expand-btn,
 .back-top,
 .clear,
 .ai-toggle,
-.site-card {
+.site-card,
+.c-tabs__item,
+.c-btn:not(:disabled),
+.entry-card {
   cursor: pointer;
 }
 
@@ -73,13 +80,27 @@ a {
   cursor: pointer;
 }
 
-/* 表格行可点时 */
-.admin-table tbody tr[data-clickable] {
+/* Table row clickable */
+.admin-table tbody tr[data-clickable],
+.c-table tbody tr[data-clickable] {
   cursor: pointer;
 }
 
-/* 调整尺寸 */
+/* Resize */
 textarea {
   cursor: text;
   resize: vertical;
+}
+
+/* Modal close / icon buttons feel precise */
+.ann-close,
+.side-rail__close,
+.console-icon-btn,
+.admin-icon-btn {
+  cursor: pointer;
+}
+
+/* Links in dark UI */
+.mecha-void a[href]:hover {
+  cursor: pointer;
 }

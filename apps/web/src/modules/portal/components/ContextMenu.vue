@@ -36,10 +36,13 @@ onUnmounted(() => {
 
 <template>
   <div
-    class="ctx panel"
+    class="ctx hull hull--elevated"
     :style="{ left: `${x}px`, top: `${y}px` }"
     @click.stop
   >
+    <div class="hull-corners" aria-hidden="true">
+      <span class="c-tl" /><span class="c-tr" /><span class="c-bl" /><span class="c-br" />
+    </div>
     <button type="button" @click="emit('visit')">访问链接</button>
     <button type="button" @click="emit('copy')">复制链接</button>
     <template v-if="isAdmin">
@@ -55,8 +58,8 @@ onUnmounted(() => {
 .ctx {
   position: fixed;
   z-index: 900;
-  min-width: 160px;
-  padding: 6px;
+  min-width: 168px;
+  padding: 8px;
   display: grid;
   gap: 2px;
 }
@@ -70,15 +73,18 @@ onUnmounted(() => {
   font-size: var(--text-sm);
   cursor: pointer;
   border-radius: var(--radius-sm);
+  position: relative;
+  z-index: 1;
 }
 .ctx button:hover {
-  background: var(--bg-panel-elevated);
-  color: var(--glow-cyan);
+  background: color-mix(in srgb, var(--energy) 12%, var(--bg-panel-elevated));
+  color: var(--energy);
 }
 .ctx .danger:hover {
   color: var(--danger);
+  background: rgba(255, 77, 106, 0.1);
 }
-hr {
+.ctx hr {
   border: 0;
   border-top: 1px solid var(--stroke-dim);
   margin: 4px 0;

@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 280" fill="none">
+  <g fill="#0a0e14" opacity="0.95">
+    <path d="M95 30 L110 18 L125 40 L118 70 L95 62 Z"/>
+    <path d="M70 55 L115 45 L145 70 L150 110 L120 125 L75 105 Z"/>
+    <path d="M20 95 L70 85 L85 115 L55 145 L15 130 Z"/>
+    <path d="M150 70 L185 55 L190 90 L155 115 L140 95 Z"/>
+    <path d="M90 120 L125 115 L135 175 L100 195 L85 160 Z"/>
+    <path d="M95 185 L118 195 L125 255 L98 265 L88 230 Z"/>
+    <path d="M70 100 L90 115 L82 150 L58 140 Z"/>
+  </g>
+</svg>

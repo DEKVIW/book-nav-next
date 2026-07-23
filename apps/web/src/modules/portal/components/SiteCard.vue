@@ -1,6 +1,8 @@
 <script setup lang="ts">
+import { computed } from 'vue'
 import type { Website } from '@/shared/types/models'
 import { useCardTooltip } from '@/shared/composables/useCardTooltip'
+import { skinForId } from '@/shared/mecha/skins'
 
 const props = defineProps<{
   site: Website
@@ -16,6 +18,7 @@ const emit = defineEmits<{
 }>()
 
 const tip = useCardTooltip()
+const skin = computed(() => skinForId(props.site.id))
 
 function letterFallback(title: string) {
   const t = title.trim()
@@ -51,7 +54,13 @@ function onLeave() {
     :class="{ 'site-card--drag': draggable }"
     :href="site.url"
     :data-id="site.id"
+    :data-skin="skin.id"
     :draggable="!!draggable"
+    :style="{
+      '--skin-accent': skin.accent,
+      '--skin-accent-dim': skin.accentDim,
+      '--skin-tint': skin.tint,
+    }"
     @click="onClick"
     @contextmenu="onContext"
     @mouseenter="onEnter"
@@ -66,6 +75,13 @@ function onLeave() {
     <div class="hull-corners" aria-hidden="true">
       <span class="c-tl" /><span class="c-tr" /><span class="c-bl" /><span class="c-br" />
     </div>
+
+    <!-- Mecha silhouette: bottom-left, fades upward -->
+    <div
+      class="site-card__mecha"
+      aria-hidden="true"
+      :style="{ backgroundImage: `url(${skin.silhouette})` }"
+    />
 
     <div class="site-card__icon" aria-hidden="true">
       <img
@@ -94,6 +110,9 @@ function onLeave() {
 
 <style scoped>
 .site-card {
+  --skin-accent: var(--energy);
+  --skin-accent-dim: var(--energy-dim);
+  --skin-tint: transparent;
   display: flex;
   gap: var(--space-3);
   align-items: flex-start;
@@ -101,8 +120,13 @@ function onLeave() {
   padding: 14px 16px 16px;
   text-decoration: none;
   color: inherit;
-  cursor: pointer; /* 可点打开；draggable 时由 cursors.css 覆盖为 grab */
+  cursor: pointer;
   overflow: hidden;
+  position: relative;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.03) 0%, transparent 28%),
+    linear-gradient(135deg, var(--skin-tint), transparent 55%),
+    var(--bg-panel-solid);
   transition:
     border-color var(--dur-fast) var(--ease-out),
     box-shadow var(--dur-fast) var(--ease-out),
@@ -110,12 +134,36 @@ function onLeave() {
   user-select: none;
 }
 .site-card:hover {
-  border-color: var(--stroke-bright);
-  box-shadow: var(--glow-sm), var(--panel-shadow);
+  border-color: color-mix(in srgb, var(--skin-accent) 55%, var(--stroke-dim));
+  box-shadow:
+    0 0 0 1px var(--skin-accent-dim),
+    0 0 20px color-mix(in srgb, var(--skin-accent) 18%, transparent),
+    var(--panel-shadow);
   transform: translateY(-1px);
 }
 .site-card:active {
   transform: scale(0.985);
+}
+
+.site-card__mecha {
+  pointer-events: none;
+  position: absolute;
+  left: -4px;
+  bottom: -6px;
+  width: 72px;
+  height: 96px;
+  z-index: 0;
+  background-repeat: no-repeat;
+  background-position: left bottom;
+  background-size: contain;
+  opacity: 0.22;
+  filter: drop-shadow(0 0 8px var(--skin-accent-dim));
+  -webkit-mask-image: linear-gradient(to top, #000 35%, transparent 95%);
+  mask-image: linear-gradient(to top, #000 35%, transparent 95%);
+  transition: opacity var(--dur-base) var(--ease-out);
+}
+.site-card:hover .site-card__mecha {
+  opacity: 0.38;
 }
 
 .site-card__icon {
@@ -127,7 +175,7 @@ function onLeave() {
   display: grid;
   place-items: center;
   background:
-    linear-gradient(135deg, rgba(61, 231, 255, 0.08), transparent 60%),
+    linear-gradient(135deg, color-mix(in srgb, var(--skin-accent) 14%, transparent), transparent 60%),
     var(--bg-inset);
   border: 1px solid var(--stroke-dim);
   clip-path: polygon(6px 0, 100% 0, 100% calc(100% - 6px), calc(100% - 6px) 100%, 0 100%, 0 6px);
@@ -141,8 +189,8 @@ function onLeave() {
 .site-card__letter {
   font-family: var(--font-display);
   font-size: 1rem;
-  color: var(--energy);
-  text-shadow: 0 0 12px var(--energy-glow);
+  color: var(--skin-accent);
+  text-shadow: 0 0 12px var(--skin-accent-dim);
 }
 
 .site-card__body {
@@ -168,29 +216,45 @@ function onLeave() {
 }
 .site-card__desc {
   margin: 6px 0 0;
-  font-size: 12px;
-  color: var(--text-secondary);
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  line-height: 1.45;
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
-  line-height: 1.45;
 }
-
 .site-card__rail {
   position: absolute;
-  left: 14px;
-  right: 14px;
-  bottom: 0;
-  height: 2px;
-  background: linear-gradient(90deg, transparent, var(--energy-dim), transparent);
-  opacity: 0.45;
-  transition: opacity var(--dur-fast);
+  top: 10px;
+  right: 0;
+  bottom: 10px;
+  width: 2px;
+  background: linear-gradient(
+    180deg,
+    transparent,
+    var(--skin-accent-dim),
+    transparent
+  );
+  opacity: 0.7;
   z-index: 1;
 }
-.site-card:hover .site-card__rail {
-  opacity: 1;
-  background: linear-gradient(90deg, transparent, var(--energy), transparent);
-  box-shadow: 0 0 12px var(--energy-glow);
+.badge {
+  font-size: 9px;
+  font-family: var(--font-mono);
+  letter-spacing: 0.06em;
+  padding: 2px 5px;
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+.badge--private {
+  color: var(--amber);
+  border: 1px solid var(--amber-dim);
+  background: rgba(255, 176, 32, 0.1);
+}
+.badge--dead {
+  color: var(--danger);
+  border: 1px solid rgba(255, 77, 106, 0.35);
+  background: rgba(255, 77, 106, 0.1);
 }
 </style>
