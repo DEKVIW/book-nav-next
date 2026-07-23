@@ -1,0 +1,392 @@
+/**
+ * Mecha HUD primitives — structural components, not decoration spam.
+ */
+
+/* —— Page void: layered depth —— */
+.mecha-void {
+  min-height: 100vh;
+  background-color: var(--bg-void);
+  background-image:
+    /* vignette */
+    radial-gradient(ellipse 120% 80% at 50% -20%, rgba(40, 90, 140, 0.12), transparent 55%),
+    radial-gradient(ellipse 80% 50% at 100% 100%, rgba(20, 60, 90, 0.08), transparent 50%),
+    /* tactical grid */
+    linear-gradient(rgba(90, 150, 200, 0.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(90, 150, 200, 0.035) 1px, transparent 1px),
+    /* fine dots */
+    radial-gradient(rgba(100, 160, 220, 0.04) 0.6px, transparent 0.7px);
+  background-size:
+    auto,
+    auto,
+    48px 48px,
+    48px 48px,
+    16px 16px;
+  background-attachment: fixed;
+}
+
+/* —— Hull panel frame —— */
+.hull {
+  position: relative;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.03) 0%, transparent 28%),
+    var(--bg-panel-solid);
+  border: 1px solid var(--stroke-dim);
+  box-shadow: var(--panel-shadow), var(--inset-shadow);
+  clip-path: var(--clip-card);
+}
+
+.hull--elevated {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.045) 0%, transparent 32%),
+    var(--bg-panel-elevated);
+  border-color: var(--stroke-mid);
+}
+
+/* Corner brackets */
+.hull-corners {
+  pointer-events: none;
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+}
+.hull-corners span {
+  position: absolute;
+  width: 12px;
+  height: 12px;
+  border-color: var(--energy-dim);
+  border-style: solid;
+  transition: border-color var(--dur-fast) var(--ease-out);
+}
+.hull-corners .c-tl {
+  top: 4px;
+  left: 4px;
+  border-width: 2px 0 0 2px;
+}
+.hull-corners .c-tr {
+  top: 4px;
+  right: 4px;
+  border-width: 2px 2px 0 0;
+}
+.hull-corners .c-bl {
+  bottom: 4px;
+  left: 4px;
+  border-width: 0 0 2px 2px;
+}
+.hull-corners .c-br {
+  bottom: 4px;
+  right: 4px;
+  border-width: 0 2px 2px 0;
+}
+.hull:hover .hull-corners span,
+.hull--active .hull-corners span {
+  border-color: var(--energy);
+}
+
+/* Section bay header */
+.bay-header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin-bottom: var(--space-4);
+  min-height: 36px;
+}
+.bay-header__code {
+  font-family: var(--font-display);
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  color: var(--energy);
+  opacity: 0.85;
+  flex-shrink: 0;
+}
+.bay-header__stripe {
+  width: 3px;
+  height: 20px;
+  flex-shrink: 0;
+  background: var(--energy);
+  box-shadow: 0 0 10px var(--energy-glow);
+}
+.bay-header__title {
+  margin: 0;
+  font-size: var(--text-lg);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--text-primary);
+}
+.bay-header__meta {
+  margin-left: auto;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-muted);
+  border: 1px solid var(--stroke-dim);
+  padding: 3px 8px;
+  clip-path: polygon(4px 0, 100% 0, 100% calc(100% - 4px), calc(100% - 4px) 100%, 0 100%, 0 4px);
+}
+
+/* —— Buttons —— */
+.m-btn {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  height: 36px;
+  padding: 0 14px;
+  border: 1px solid var(--stroke-mid);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.04), transparent 40%),
+    var(--bg-panel-solid);
+  color: var(--text-primary);
+  text-decoration: none;
+  cursor: pointer;
+  font-size: var(--text-sm);
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  clip-path: polygon(6px 0, 100% 0, 100% calc(100% - 6px), calc(100% - 6px) 100%, 0 100%, 0 6px);
+  transition:
+    border-color var(--dur-fast) var(--ease-out),
+    box-shadow var(--dur-fast) var(--ease-out),
+    background var(--dur-fast) var(--ease-out),
+    transform var(--dur-fast) var(--ease-out);
+  user-select: none;
+}
+.m-btn:hover:not(:disabled) {
+  border-color: var(--stroke-bright);
+  box-shadow: 0 0 0 1px var(--energy-dim);
+}
+.m-btn:active:not(:disabled) {
+  transform: scale(0.98);
+}
+.m-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.m-btn--primary {
+  border-color: color-mix(in srgb, var(--energy) 55%, var(--stroke-mid));
+  background:
+    linear-gradient(135deg, rgba(61, 231, 255, 0.16), rgba(61, 231, 255, 0.04) 50%, transparent),
+    var(--bg-panel-elevated);
+  color: var(--text-primary);
+  text-shadow: 0 0 12px var(--energy-glow);
+}
+.m-btn--primary:hover:not(:disabled) {
+  box-shadow: var(--glow-sm);
+  border-color: var(--energy);
+}
+.m-btn--ghost {
+  background: transparent;
+  border-color: var(--stroke-dim);
+}
+.m-btn--danger {
+  border-color: color-mix(in srgb, var(--danger) 50%, var(--stroke-dim));
+  color: #ffb3bf;
+}
+.m-btn--icon {
+  width: 36px;
+  padding: 0;
+}
+
+/* —— Inputs —— */
+.m-input {
+  width: 100%;
+  height: 40px;
+  padding: 0 12px;
+  border: 1px solid var(--stroke-dim);
+  background: var(--bg-input);
+  color: var(--text-primary);
+  border-radius: 0;
+  clip-path: polygon(6px 0, 100% 0, 100% calc(100% - 6px), calc(100% - 6px) 100%, 0 100%, 0 6px);
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.35);
+  transition:
+    border-color var(--dur-fast),
+    box-shadow var(--dur-fast);
+}
+.m-input:focus {
+  border-color: var(--energy);
+  box-shadow:
+    inset 0 1px 2px rgba(0, 0, 0, 0.35),
+    0 0 0 1px var(--energy-dim),
+    0 0 16px var(--energy-glow);
+  outline: none;
+}
+.m-input:disabled {
+  opacity: 0.45;
+}
+.m-input::placeholder {
+  color: var(--text-muted);
+}
+textarea.m-input {
+  height: auto;
+  padding: 10px 12px;
+  resize: vertical;
+  clip-path: none;
+  border-radius: var(--radius-sm);
+}
+
+/* —— Status —— */
+.status-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--text-muted);
+  box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.35);
+  flex-shrink: 0;
+}
+.status-dot--ok {
+  background: var(--success);
+  box-shadow: 0 0 8px rgba(61, 255, 181, 0.45);
+}
+.status-dot--warn {
+  background: var(--amber);
+  box-shadow: 0 0 8px rgba(255, 176, 32, 0.4);
+}
+.status-dot--err {
+  background: var(--danger);
+  box-shadow: 0 0 8px rgba(255, 77, 106, 0.4);
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  padding: 2px 6px;
+  border: 1px solid var(--stroke-mid);
+  color: var(--text-secondary);
+  clip-path: polygon(3px 0, 100% 0, 100% calc(100% - 3px), calc(100% - 3px) 100%, 0 100%, 0 3px);
+}
+.badge--private {
+  border-color: var(--amber-dim);
+  color: var(--amber);
+}
+.badge--dead {
+  border-color: color-mix(in srgb, var(--danger) 50%, transparent);
+  color: var(--danger);
+}
+
+/* —— HUD label —— */
+.hud-label {
+  font-family: var(--font-display);
+  font-size: 10px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--energy);
+  margin: 0;
+}
+
+/* —— Tabs (subcategory) —— */
+.m-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: var(--space-4);
+}
+.m-tab {
+  border: 1px solid var(--stroke-dim);
+  background: var(--bg-inset);
+  color: var(--text-secondary);
+  padding: 6px 12px;
+  font: inherit;
+  font-size: var(--text-xs);
+  cursor: pointer;
+  clip-path: polygon(5px 0, 100% 0, 100% calc(100% - 5px), calc(100% - 5px) 100%, 0 100%, 0 5px);
+  transition:
+    border-color var(--dur-fast),
+    color var(--dur-fast),
+    box-shadow var(--dur-fast);
+}
+.m-tab:hover {
+  color: var(--text-primary);
+  border-color: var(--stroke-mid);
+}
+.m-tab--active {
+  color: var(--text-primary);
+  border-color: color-mix(in srgb, var(--energy) 55%, var(--stroke-dim));
+  box-shadow: 0 0 0 1px var(--energy-dim), 0 0 12px var(--energy-glow);
+  background: color-mix(in srgb, var(--energy) 8%, var(--bg-panel-solid));
+}
+
+/* —— Tooltip host —— */
+.m-tooltip {
+  position: fixed;
+  z-index: var(--z-tooltip);
+  max-width: min(300px, calc(100vw - 24px));
+  padding: 10px 12px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.05), transparent 40%),
+    var(--bg-panel-elevated);
+  border: 1px solid var(--stroke-mid);
+  color: var(--text-secondary);
+  font-size: var(--text-xs);
+  line-height: 1.55;
+  box-shadow: var(--panel-shadow), 0 0 20px var(--energy-glow);
+  clip-path: polygon(8px 0, 100% 0, 100% calc(100% - 8px), calc(100% - 8px) 100%, 0 100%, 0 8px);
+  pointer-events: none;
+  opacity: 0;
+  transform: translateY(4px);
+  transition:
+    opacity var(--dur-fast) var(--ease-out),
+    transform var(--dur-fast) var(--ease-out);
+}
+.m-tooltip.is-visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+.m-tooltip__title {
+  display: block;
+  color: var(--text-primary);
+  font-weight: 600;
+  margin-bottom: 4px;
+  font-size: var(--text-sm);
+}
+
+/* —— Modal mask —— */
+.mecha-mask {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-modal);
+  background: rgba(2, 6, 12, 0.72);
+  backdrop-filter: blur(6px);
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  animation: mask-in var(--dur-base) var(--ease-out);
+}
+@keyframes mask-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* —— Scanline under top rail (static / subtle) —— */
+.scan-edge {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -1px;
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    var(--energy-dim) 20%,
+    var(--energy) 50%,
+    var(--energy-dim) 80%,
+    transparent 100%
+  );
+  opacity: 0.55;
+  pointer-events: none;
+}
+
+/* legacy panel class bridge */
+.panel {
+  position: relative;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.03) 0%, transparent 28%),
+    var(--bg-panel-solid);
+  border: 1px solid var(--stroke-dim);
+  box-shadow: var(--panel-shadow), var(--inset-shadow);
+  clip-path: var(--clip-card);
+}

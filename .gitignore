@@ -1,0 +1,47 @@
+# Dependencies
+node_modules/
+apps/web/node_modules/
+
+# Build
+apps/web/dist/
+apps/server/webdist/*
+!apps/server/webdist/.gitkeep
+apps/server/bin/
+dist/
+*.exe
+*.test
+
+# Data & secrets
+data/*
+!data/.gitkeep
+.env
+.env.local
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+
+# Docs (local design notes only — not versioned)
+docs/
+
+# Local detached process state (start.ps1 / watchdog)
+.dev/
+
+# IDE / OS
+.idea/
+.vscode/
+*.swp
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
+
+# Go
+apps/server/vendor/
+
+# Generated / temp assets
+*.tmp
+*.bak
+apps/web/public/mecha/raw/

@@ -1,0 +1,85 @@
+/**
+ * 全局光标规范
+ * 可交互 = pointer；文本 = text；禁用 = not-allowed；拖拽 = grab
+ */
+
+/* —— 默认可点控件 —— */
+button:not(:disabled),
+[type='button']:not(:disabled),
+[type='submit']:not(:disabled),
+[type='reset']:not(:disabled),
+[role='button']:not([aria-disabled='true']),
+a[href],
+summary,
+label[for],
+.m-btn:not(:disabled),
+.m-tab,
+.side-item__main,
+.side-item__toggle,
+.side-sub__item,
+.admin-nav-item,
+.expand-btn,
+.back-top,
+.clear,
+.ai-toggle,
+.site-card {
+  cursor: pointer;
+}
+
+/* 文本输入 */
+input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='color']):not([type='file']):not([type='button']):not([type='submit']):not([type='reset']),
+textarea,
+[contenteditable='true'] {
+  cursor: text;
+}
+
+/* 复选 / 单选 */
+input[type='checkbox'],
+input[type='radio'],
+.m-tab input,
+.ai-toggle input {
+  cursor: pointer;
+}
+
+/* 下拉 */
+select,
+.m-input[type='color'] {
+  cursor: pointer;
+}
+
+/* 禁用 */
+button:disabled,
+.m-btn:disabled,
+input:disabled,
+select:disabled,
+textarea:disabled,
+[aria-disabled='true'],
+.admin-nav-item:disabled {
+  cursor: not-allowed !important;
+}
+
+/* 拖拽卡片 */
+.site-card--drag,
+.site-card[draggable='true'] {
+  cursor: grab;
+}
+.site-card--drag:active,
+.site-card[draggable='true']:active {
+  cursor: grabbing;
+}
+
+/* 链接默认 pointer；纯文本链接也要 */
+a {
+  cursor: pointer;
+}
+
+/* 表格行可点时 */
+.admin-table tbody tr[data-clickable] {
+  cursor: pointer;
+}
+
+/* 调整尺寸 */
+textarea {
+  cursor: text;
+  resize: vertical;
+}

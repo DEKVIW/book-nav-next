@@ -1,0 +1,101 @@
+/**
+ * BookNav Mecha HUD — Design Tokens
+ * 见 docs/design/mecha-hud-principles.md
+ */
+
+@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@500;600;700&family=Noto+Sans+SC:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+
+:root {
+  /* Depth layers */
+  --bg-void: #05080f;
+  --bg-hull: #0a121c;
+  --bg-panel: #0e1826;
+  --bg-panel-solid: #0e1826;
+  --bg-panel-elevated: #142033;
+  --bg-inset: #070e16;
+  --bg-input: #0a1420;
+
+  /* Structure strokes */
+  --stroke-dim: rgba(90, 130, 170, 0.22);
+  --stroke-mid: rgba(100, 150, 200, 0.38);
+  --stroke-bright: rgba(120, 190, 255, 0.55);
+  --stroke-active: #3ec4ff;
+
+  /* Energy / status */
+  --energy: #3de7ff;
+  --energy-dim: rgba(61, 231, 255, 0.35);
+  --energy-glow: rgba(61, 231, 255, 0.22);
+  --amber: #ffb020;
+  --amber-dim: rgba(255, 176, 32, 0.35);
+  --magenta: #b388ff;
+  --success: #3dffb5;
+  --danger: #ff4d6a;
+  --private: #ffb020;
+
+  /* legacy aliases */
+  --glow-cyan: var(--energy);
+  --glow-amber: var(--amber);
+  --glow-magenta: var(--magenta);
+
+  /* Text */
+  --text-primary: #e9f2ff;
+  --text-secondary: #8fa6c2;
+  --text-muted: #5c7390;
+
+  /* Elevation */
+  --glow-sm: 0 0 0 1px var(--energy-dim), 0 0 16px var(--energy-glow);
+  --glow-md: 0 0 0 1px var(--energy), 0 0 24px var(--energy-glow);
+  --panel-shadow: 0 12px 40px rgba(0, 0, 0, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  --inset-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03), inset 0 -1px 0 rgba(0, 0, 0, 0.35);
+
+  /* Type */
+  --font-sans: 'Noto Sans SC', 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', system-ui, sans-serif;
+  --font-display: 'Orbitron', 'Segoe UI', var(--font-sans);
+  --font-mono: 'JetBrains Mono', 'Cascadia Code', 'Consolas', ui-monospace, monospace;
+
+  --text-xs: 0.75rem;
+  --text-sm: 0.875rem;
+  --text-base: 0.9375rem;
+  --text-lg: 1.125rem;
+  --text-xl: 1.35rem;
+
+  /* Space */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+  --space-8: 48px;
+
+  --radius-xs: 2px;
+  --radius-sm: 3px;
+  --radius-md: 4px;
+  --clip-card: polygon(12px 0, 100% 0, 100% calc(100% - 12px), calc(100% - 12px) 100%, 0 100%, 0 12px);
+
+  --top-rail-height: 58px;
+  --sidebar-width: 248px;
+  --content-max: 1480px;
+  --card-min-height: 96px;
+
+  --dur-fast: 140ms;
+  --dur-base: 220ms;
+  --dur-slow: 360ms;
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-hydraulic: cubic-bezier(0.16, 1, 0.3, 1);
+
+  --z-rail: 60;
+  --z-sidebar: 55;
+  --z-overlay: 50;
+  --z-modal: 800;
+  --z-tooltip: 900;
+  --z-toast: 1000;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --dur-fast: 0ms;
+    --dur-base: 0ms;
+    --dur-slow: 0ms;
+  }
+}

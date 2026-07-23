@@ -1,0 +1,13 @@
+DROP TABLE IF EXISTS website_icons;
+DROP TABLE IF EXISTS icon_assets;
+DROP TABLE IF EXISTS deadlink_checks;
+DROP TABLE IF EXISTS jobs;
+DROP TABLE IF EXISTS settings_kv;
+DROP TABLE IF EXISTS operation_logs;
+DROP TABLE IF EXISTS website_viewers;
+DROP TABLE IF EXISTS websites;
+DROP TABLE IF EXISTS categories;
+DROP TABLE IF EXISTS invitation_codes;
+DROP TABLE IF EXISTS sessions;
+DROP TABLE IF EXISTS users;
+DROP TABLE IF EXISTS schema_migrations;

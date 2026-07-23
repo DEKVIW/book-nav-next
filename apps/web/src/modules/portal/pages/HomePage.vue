@@ -1,0 +1,722 @@
+<script setup lang="ts">
+/**
+ * 前台首页 — 功能对齐旧站 + 市面导航「就地展开」
+ *
+ * 看全部：display_limit 限显 →「展开全部」懒加载该分类/子类全部链接（不跳独立页）
+ * 粘贴快加：非输入框 paste URL → 查重 → 自动抓取标题描述图标
+ */
+import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue'
+import { useRouter } from 'vue-router'
+import MechaShell from '@/app/layouts/MechaShell.vue'
+import SiteCard from '@/modules/portal/components/SiteCard.vue'
+import ContextMenu from '@/modules/portal/components/ContextMenu.vue'
+import WebsiteFormModal from '@/modules/portal/components/WebsiteFormModal.vue'
+import DuplicateDialog from '@/modules/portal/components/DuplicateDialog.vue'
+import AnnouncementModal from '@/modules/portal/components/AnnouncementModal.vue'
+import { useAuthStore } from '@/shared/stores/auth'
+import { usePortalStore } from '@/shared/stores/portal'
+import { useToast } from '@/shared/composables/useToast'
+import type { Category, Website } from '@/shared/types/models'
+
+const auth = useAuthStore()
+const portal = usePortalStore()
+const toast = useToast()
+const router = useRouter()
+
+/** 当前舱段激活的 Tab：root | 子分类 id */
+const activeTabs = ref<Record<number, number | 'root'>>({})
+/** 已展开全部的 key：`${catId}:${tab}` */
+const expandedKeys = ref<Record<string, boolean>>({})
+/** 分类/子类全量缓存 */
+const sectionSitesCache = ref<Record<number, Website[]>>({})
+
+const ctx = ref<{ x: number; y: number; site: Website } | null>(null)
+const formOpen = ref(false)
+const formMode = ref<'create' | 'edit'>('create')
+const formSite = ref<Website | null>(null)
+const formUrl = ref('')
+const formLoading = ref(false)
+const formProgress = ref('')
+const formRef = ref<InstanceType<typeof WebsiteFormModal> | null>(null)
+const dupOpen = ref(false)
+const dupSite = ref<Website | null>(null)
+const pendingForceUrl = ref('')
+const dragState = ref<{ catId: number; ids: number[] } | null>(null)
+const showTop = ref(false)
+const useAI = ref(false)
+
+const displayCategories = computed(() => portal.categories)
+
+const aiAvailable = computed(() => {
+  const s = portal.settings
+  if (!s?.ai_search_enabled) return false
+  if (!auth.isLoggedIn && !s.ai_search_allow_anonymous) return false
+  return true
+})
+
+function tabKey(catId: number, tab: number | 'root' | undefined) {
+  return `${catId}:${tab ?? 'root'}`
+}
+
+function resolveTab(cat: Category): number | 'root' {
+  return activeTabs.value[cat.id] ?? (cat.displayed_subcategory_id ? cat.displayed_subcategory_id : 'root')
+}
+
+function cacheIdFor(cat: Category): number {
+  const tab = resolveTab(cat)
+  return tab === 'root' ? cat.id : tab
+}
+
+/** 当前 Tab 下链接总数（用于展开按钮） */
+function totalFor(cat: Category): number {
+  const tab = resolveTab(cat)
+  if (typeof tab === 'number') {
+    const ch = cat.children?.find((c) => c.id === tab)
+    if (ch?.website_count != null) return ch.website_count
+    return sectionSitesCache.value[tab]?.length ?? 0
+  }
+  // root / 未分类
+  if (cat.direct_count != null) return cat.direct_count
+  return sectionSitesCache.value[cat.id]?.length ?? cat.websites?.length ?? 0
+}
+
+function isExpanded(cat: Category) {
+  return !!expandedKeys.value[tabKey(cat.id, resolveTab(cat))]
+}
+
+function limitOf(cat: Category) {
+  return cat.display_limit > 0 ? cat.display_limit : 10
+}
+
+function sitesFor(cat: Category): Website[] {
+  const cid = cacheIdFor(cat)
+  const all = sectionSitesCache.value[cid] || cat.websites || []
+  if (isExpanded(cat)) return all
+  const lim = limitOf(cat)
+  // 首页首屏：未展开时始终限显
+  return all.slice(0, lim)
+}
+
+function canExpand(cat: Category) {
+  return totalFor(cat) > sitesFor(cat).length || (totalFor(cat) > limitOf(cat) && !isExpanded(cat))
+}
+
+async function ensureFullList(cat: Category) {
+  const cid = cacheIdFor(cat)
+  // 若缓存长度仍像限显且总数更大，强制拉全量
+  const total = totalFor(cat)
+  const cached = sectionSitesCache.value[cid]
+  if (cached && cached.length >= total && total > 0) return cached
+  const list = await portal.loadCategoryAll(cid)
+  sectionSitesCache.value[cid] = list
+  // 修正总数展示：用真实长度
+  return list
+}
+
+async function expandCategory(cat: Category) {
+  formProgress.value = ''
+  try {
+    await ensureFullList(cat)
+    expandedKeys.value = {
+      ...expandedKeys.value,
+      [tabKey(cat.id, resolveTab(cat))]: true,
+    }
+  } catch (e: unknown) {
+    toast.error(e instanceof Error ? e.message : '加载失败')
+  }
+}
+
+function collapseCategory(cat: Category) {
+  expandedKeys.value = {
+    ...expandedKeys.value,
+    [tabKey(cat.id, resolveTab(cat))]: false,
+  }
+}
+
+async function selectTab(cat: Category, tab: number | 'root') {
+  activeTabs.value[cat.id] = tab
+  // 切换 Tab 时默认收起，保持轻量
+  const key = tabKey(cat.id, tab)
+  if (!expandedKeys.value[key]) {
+    const cid = tab === 'root' ? cat.id : tab
+    // 先用已有缓存；没有则拉全量但仍然限显（slice）
+    if (!sectionSitesCache.value[cid]) {
+      try {
+        sectionSitesCache.value[cid] = await portal.loadCategoryAll(cid)
+      } catch {
+        sectionSitesCache.value[cid] = []
+      }
+    }
+  }
+}
+
+async function onSidebarSubcategory(parentId: number, childId: number | 'root') {
+  const cat = portal.categories.find((c) => c.id === parentId)
+  if (!cat) return
+  await selectTab(cat, childId)
+}
+
+function initTabs() {
+  for (const cat of portal.categories) {
+    if (cat.displayed_subcategory_id) {
+      activeTabs.value[cat.id] = cat.displayed_subcategory_id
+      // 首页只带了限显列表
+      sectionSitesCache.value[cat.displayed_subcategory_id] = cat.websites || []
+    } else {
+      activeTabs.value[cat.id] = 'root'
+      sectionSitesCache.value[cat.id] = cat.websites || []
+    }
+  }
+}
+
+watch(
+  () => portal.categories,
+  () => initTabs(),
+  { deep: true },
+)
+
+function onScroll() {
+  showTop.value = window.scrollY > 400
+}
+
+onMounted(async () => {
+  await portal.loadHome()
+  initTabs()
+  if (location.hash.startsWith('#cat-')) {
+    document.querySelector(location.hash)?.scrollIntoView()
+  }
+  window.addEventListener('paste', onPaste)
+  window.addEventListener('scroll', onScroll, { passive: true })
+})
+
+onUnmounted(() => {
+  window.removeEventListener('paste', onPaste)
+  window.removeEventListener('scroll', onScroll)
+})
+
+function isValidUrl(text: string) {
+  try {
+    const u = new URL(text.includes('://') ? text : `https://${text}`)
+    return u.protocol === 'http:' || u.protocol === 'https:'
+  } catch {
+    return false
+  }
+}
+
+async function onPaste(e: ClipboardEvent) {
+  if (!auth.isAdmin) return
+  const t = e.target as HTMLElement | null
+  if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return
+  if (formOpen.value || dupOpen.value) return
+  const text = e.clipboardData?.getData('text')?.trim() || ''
+  if (!isValidUrl(text)) return
+  e.preventDefault()
+  await startQuickAdd(text)
+}
+
+async function startQuickAdd(url: string) {
+  formMode.value = 'create'
+  formSite.value = null
+  formUrl.value = url
+  formOpen.value = true
+  formLoading.value = true
+  formProgress.value = '正在检查是否重复…'
+  await nextTick()
+  formRef.value?.setUrl(url)
+  try {
+    const check = await portal.checkUrl(url)
+    if (check.exists && check.website) {
+      formOpen.value = false
+      formLoading.value = false
+      formProgress.value = ''
+      dupSite.value = check.website
+      pendingForceUrl.value = url
+      dupOpen.value = true
+      return
+    }
+    formProgress.value = '正在抓取标题、描述与图标…'
+    const meta = await portal.fetchSite(url)
+    await nextTick()
+    formRef.value?.applyMeta({
+      title: String(meta.title || ''),
+      description: String(meta.description || ''),
+      icon_url: String(meta.icon_url || ''),
+      url: String(meta.url || url),
+    })
+    if (!meta.title && !meta.description) {
+      toast.info('未能自动解析，请手动填写')
+    }
+  } catch (err: unknown) {
+    toast.error(err instanceof Error ? err.message : '解析失败')
+    formRef.value?.setUrl(url)
+  } finally {
+    formLoading.value = false
+    formProgress.value = ''
+  }
+}
+
+async function onDupForce() {
+  dupOpen.value = false
+  await startQuickAdd(pendingForceUrl.value)
+  // startQuickAdd 会再 check 一次；force 时跳过重复：直接抓取
+}
+
+// 强制添加：跳过查重
+async function onDupForceSkipCheck() {
+  dupOpen.value = false
+  const url = pendingForceUrl.value
+  formMode.value = 'create'
+  formSite.value = null
+  formUrl.value = url
+  formOpen.value = true
+  formLoading.value = true
+  formProgress.value = '正在抓取网站信息…'
+  await nextTick()
+  formRef.value?.setUrl(url)
+  try {
+    const meta = await portal.fetchSite(url)
+    await nextTick()
+    formRef.value?.applyMeta({
+      title: String(meta.title || ''),
+      description: String(meta.description || ''),
+      icon_url: String(meta.icon_url || ''),
+      url,
+    })
+  } finally {
+    formLoading.value = false
+    formProgress.value = ''
+  }
+}
+
+function onDupView() {
+  dupOpen.value = false
+  const w = dupSite.value
+  if (!w) return
+  // 定位分类：优先 category_id
+  if (w.category_id) {
+    // 可能是子分类：找到父级
+    let parentId = w.category_id
+    let childTab: number | 'root' = 'root'
+    for (const cat of portal.categories) {
+      if (cat.id === w.category_id) {
+        parentId = cat.id
+        childTab = 'root'
+        break
+      }
+      const ch = cat.children?.find((c) => c.id === w.category_id)
+      if (ch) {
+        parentId = cat.id
+        childTab = ch.id
+        break
+      }
+    }
+    const parent = portal.categories.find((c) => c.id === parentId)
+    if (parent) {
+      selectTab(parent, childTab).then(() => {
+        expandCategory(parent).then(() => {
+          document.getElementById(`cat-${parentId}`)?.scrollIntoView({ behavior: 'smooth' })
+          // 高亮卡片
+          nextTick(() => {
+            const card = document.querySelector(`[data-id="${w.id}"]`) as HTMLElement | null
+            card?.classList.add('site-card--highlight')
+            setTimeout(() => card?.classList.remove('site-card--highlight'), 2000)
+          })
+        })
+      })
+    }
+  }
+  toast.info('已定位到已有链接')
+}
+
+async function onFormSubmit(payload: Record<string, unknown>) {
+  formLoading.value = true
+  formProgress.value = '正在保存…'
+  try {
+    if (formMode.value === 'create') {
+      await portal.createWebsite(payload)
+      toast.success('链接已添加')
+    } else if (formSite.value) {
+      await portal.updateWebsite(formSite.value.id, payload)
+      toast.success('已保存')
+    }
+    formOpen.value = false
+    // 刷新后重新 initTabs
+    initTabs()
+  } catch (err: unknown) {
+    toast.error(err instanceof Error ? err.message : '操作失败')
+  } finally {
+    formLoading.value = false
+    formProgress.value = ''
+  }
+}
+
+async function onFetchMeta(url: string) {
+  formLoading.value = true
+  formProgress.value = '正在抓取网站信息…'
+  try {
+    const meta = await portal.fetchSite(url)
+    formRef.value?.applyMeta({
+      title: String(meta.title || ''),
+      description: String(meta.description || ''),
+      icon_url: String(meta.icon_url || ''),
+      url: String(meta.url || url),
+    })
+    toast.success('已填充网站信息')
+  } catch (err: unknown) {
+    toast.error(err instanceof Error ? err.message : '抓取失败')
+  } finally {
+    formLoading.value = false
+    formProgress.value = ''
+  }
+}
+
+async function openSite(site: Website) {
+  try {
+    const data = await portal.visit(site.id)
+    if (data.enable_transition && data.countdown > 0) {
+      router.push(`/goto/${site.id}`)
+      return
+    }
+    window.open(data.website.url || site.url, '_blank', 'noopener')
+  } catch {
+    window.open(site.url, '_blank', 'noopener')
+  }
+}
+
+function onContext(e: MouseEvent, site: Website) {
+  ctx.value = { x: e.clientX, y: e.clientY, site }
+}
+
+async function ctxVisit() {
+  if (!ctx.value) return
+  await openSite(ctx.value.site)
+  ctx.value = null
+}
+
+async function ctxCopy() {
+  if (!ctx.value) return
+  try {
+    await navigator.clipboard.writeText(ctx.value.site.url)
+    toast.success('已复制链接')
+  } catch {
+    toast.error('复制失败')
+  }
+  ctx.value = null
+}
+
+function ctxEdit() {
+  if (!ctx.value) return
+  formMode.value = 'edit'
+  formSite.value = ctx.value.site
+  formUrl.value = ctx.value.site.url
+  formOpen.value = true
+  ctx.value = null
+}
+
+function ctxAdd() {
+  ctx.value = null
+  formMode.value = 'create'
+  formSite.value = null
+  formUrl.value = ''
+  formOpen.value = true
+}
+
+async function ctxRemove() {
+  if (!ctx.value) return
+  const site = ctx.value.site
+  ctx.value = null
+  if (!confirm(`删除「${site.title}」？`)) return
+  try {
+    await portal.deleteWebsite(site.id)
+    toast.success('已删除')
+    initTabs()
+  } catch (err: unknown) {
+    toast.error(err instanceof Error ? err.message : '删除失败')
+  }
+}
+
+function onDragStart(cat: Category, site: Website, e: DragEvent) {
+  if (!auth.isAdmin) return
+  e.dataTransfer?.setData('text/site-id', String(site.id))
+  e.dataTransfer!.effectAllowed = 'move'
+  dragState.value = { catId: cat.id, ids: sitesFor(cat).map((s) => s.id) }
+}
+
+function onDrop(cat: Category, target: Website, e: DragEvent) {
+  e.preventDefault()
+  if (!auth.isAdmin || !dragState.value) return
+  const fromId = Number(e.dataTransfer?.getData('text/site-id'))
+  const ids = [...dragState.value.ids]
+  const from = ids.indexOf(fromId)
+  const to = ids.indexOf(target.id)
+  if (from < 0 || to < 0 || from === to) return
+  ids.splice(from, 1)
+  ids.splice(to, 0, fromId)
+  const cid = cacheIdFor(cat)
+  const map = new Map((sectionSitesCache.value[cid] || sitesFor(cat)).map((s) => [s.id, s]))
+  // 合并：只重排当前可见顺序到缓存前部
+  const rest = (sectionSitesCache.value[cid] || []).filter((s) => !ids.includes(s.id))
+  sectionSitesCache.value[cid] = [...ids.map((id) => map.get(id)!).filter(Boolean), ...rest]
+  portal
+    .reorderWebsites(cid, sectionSitesCache.value[cid].map((s) => s.id))
+    .then(() => toast.success('排序已保存'))
+    .catch((err) => toast.error(err.message || '排序失败'))
+}
+
+async function onSearch(q: string) {
+  await portal.search(q, useAI.value && aiAvailable.value)
+}
+
+function scrollTop() {
+  window.scrollTo({ top: 0, behavior: 'smooth' })
+}
+</script>
+
+<template>
+  <MechaShell
+    :categories="displayCategories"
+    :ai-available="aiAvailable"
+    v-model:use-ai="useAI"
+    @search="onSearch"
+    @select-subcategory="onSidebarSubcategory"
+  >
+    <div v-if="portal.loading" class="state">加载中…</div>
+    <div v-else-if="portal.error" class="state error">{{ portal.error }}</div>
+
+    <template v-else>
+      <!-- 搜索结果 -->
+      <section v-if="portal.searchResults" class="search-layer">
+        <header class="bay-header">
+          <span class="bay-header__code">SEARCH</span>
+          <span class="bay-header__stripe" style="background: var(--magenta)" />
+          <h2 class="bay-header__title">搜索结果</h2>
+          <span class="bay-header__meta">
+            {{ portal.searchQuery }} · {{ portal.searchResults.length }} 条
+            <template v-if="useAI && aiAvailable"> · AI</template>
+          </span>
+          <button type="button" class="m-btn m-btn--ghost" @click="portal.clearSearch()">返回导航</button>
+        </header>
+        <div v-if="!portal.searchResults.length" class="state">没有匹配的链接</div>
+        <div v-else class="card-grid">
+          <SiteCard
+            v-for="site in portal.searchResults"
+            :key="site.id"
+            :site="site"
+            @open="openSite"
+            @context="onContext"
+          />
+        </div>
+      </section>
+
+      <template v-else>
+        <!-- 精选 -->
+        <section v-if="portal.featured.length" class="featured">
+          <header class="bay-header">
+            <span class="bay-header__code">FEAT</span>
+            <span class="bay-header__stripe" style="background: var(--amber)" />
+            <h2 class="bay-header__title">精选</h2>
+            <span class="bay-header__meta">{{ portal.featured.length }}</span>
+          </header>
+          <div class="card-grid">
+            <SiteCard
+              v-for="site in portal.featured"
+              :key="'f' + site.id"
+              :site="site"
+              @open="openSite"
+              @context="onContext"
+            />
+          </div>
+        </section>
+
+        <!-- 分类舱段 -->
+        <section
+          v-for="(cat, idx) in displayCategories"
+          :id="`cat-${cat.id}`"
+          :key="cat.id"
+          class="category-section"
+        >
+          <header class="bay-header">
+            <span class="bay-header__code">BAY-{{ String(idx + 1).padStart(2, '0') }}</span>
+            <span class="bay-header__stripe" :style="{ background: cat.color || 'var(--energy)' }" />
+            <h2 class="bay-header__title">{{ cat.name }}</h2>
+            <span class="bay-header__meta">
+              显示 {{ sitesFor(cat).length }} / {{ totalFor(cat) }}
+            </span>
+            <!-- 展开 / 收起：市面导航「看全部」标准做法 -->
+            <button
+              v-if="totalFor(cat) > limitOf(cat)"
+              type="button"
+              class="m-btn m-btn--ghost expand-btn"
+              @click="isExpanded(cat) ? collapseCategory(cat) : expandCategory(cat)"
+            >
+              {{ isExpanded(cat) ? '收起' : `展开全部 (${totalFor(cat)})` }}
+            </button>
+          </header>
+
+          <div v-if="cat.children?.length" class="m-tabs" role="tablist">
+            <button
+              type="button"
+              class="m-tab"
+              :class="{ 'm-tab--active': resolveTab(cat) === 'root' }"
+              @click="selectTab(cat, 'root')"
+            >
+              未分类 ({{ cat.direct_count ?? 0 }})
+            </button>
+            <button
+              v-for="ch in cat.children"
+              :key="ch.id"
+              type="button"
+              class="m-tab"
+              :class="{ 'm-tab--active': resolveTab(cat) === ch.id }"
+              @click="selectTab(cat, ch.id)"
+            >
+              {{ ch.name }} ({{ ch.website_count ?? 0 }})
+            </button>
+          </div>
+
+          <div class="card-grid">
+            <SiteCard
+              v-for="site in sitesFor(cat)"
+              :key="site.id"
+              :site="site"
+              :draggable="auth.isAdmin"
+              @open="openSite"
+              @context="onContext"
+              @dragstart="(e: DragEvent) => onDragStart(cat, site, e)"
+              @drop="(e: DragEvent) => onDrop(cat, site, e)"
+            />
+          </div>
+
+          <div v-if="!sitesFor(cat).length" class="empty-hint">该分类下暂无链接</div>
+
+          <!-- 底部再放一次展开，长列表更顺手 -->
+          <div v-if="totalFor(cat) > sitesFor(cat).length" class="expand-footer">
+            <button type="button" class="m-btn m-btn--primary" @click="expandCategory(cat)">
+              展开全部 {{ totalFor(cat) }} 个链接
+            </button>
+          </div>
+        </section>
+
+        <p v-if="!displayCategories.length" class="state">暂无分类，请登录管理后台添加。</p>
+      </template>
+    </template>
+
+    <ContextMenu
+      v-if="ctx"
+      :x="ctx.x"
+      :y="ctx.y"
+      :is-admin="auth.isAdmin"
+      @close="ctx = null"
+      @visit="ctxVisit"
+      @copy="ctxCopy"
+      @edit="ctxEdit"
+      @add="ctxAdd"
+      @remove="ctxRemove"
+    />
+
+    <WebsiteFormModal
+      ref="formRef"
+      :open="formOpen"
+      :mode="formMode"
+      :site="formSite"
+      :categories="displayCategories"
+      :initial-url="formUrl"
+      :loading="formLoading"
+      :progress-text="formProgress"
+      @close="formOpen = false"
+      @submit="onFormSubmit"
+      @fetch-meta="onFetchMeta"
+    />
+
+    <DuplicateDialog
+      :open="dupOpen"
+      :website="dupSite"
+      @cancel="dupOpen = false"
+      @view="onDupView"
+      @force="onDupForceSkipCheck"
+    />
+
+    <!-- 公告弹窗（非内嵌条） -->
+    <AnnouncementModal
+      v-if="portal.settings"
+      :enabled="!!portal.settings.announcement_enabled"
+      :title="portal.settings.announcement_title"
+      :content="portal.settings.announcement_content"
+      :remember-days="portal.settings.announcement_remember_days || 7"
+    />
+
+    <p v-if="auth.isAdmin" class="admin-hint">
+      管理员：在页面空白处粘贴网址 → 自动查重并抓取标题/图标 · 右键卡片 · 拖拽排序 · 展开全部查看分类下所有链接
+    </p>
+
+    <button
+      v-show="showTop"
+      type="button"
+      class="back-top m-btn m-btn--primary"
+      aria-label="回到顶部"
+      @click="scrollTop"
+    >
+      ↑
+    </button>
+  </MechaShell>
+</template>
+
+<style scoped>
+.state {
+  padding: 48px;
+  text-align: center;
+  color: var(--text-secondary);
+}
+.state.error {
+  color: var(--danger);
+}
+.featured {
+  margin-bottom: 36px;
+}
+.category-section {
+  scroll-margin-top: calc(var(--top-rail-height) + 16px);
+  margin-bottom: 44px;
+}
+.card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+  gap: 14px;
+}
+.empty-hint {
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+  padding: 12px 0;
+}
+.expand-btn {
+  margin-left: 4px;
+  height: 30px !important;
+  font-size: 12px !important;
+}
+.expand-footer {
+  display: flex;
+  justify-content: center;
+  margin-top: 16px;
+}
+.admin-hint {
+  margin-top: 40px;
+  font-size: 12px;
+  color: var(--text-muted);
+  text-align: center;
+  line-height: 1.6;
+}
+.back-top {
+  position: fixed;
+  right: 20px;
+  bottom: 24px;
+  z-index: 40;
+  width: 40px !important;
+  height: 40px !important;
+  padding: 0 !important;
+  border-radius: 4px;
+  box-shadow: var(--glow-sm);
+}
+:deep(.site-card--highlight) {
+  border-color: var(--energy) !important;
+  box-shadow: var(--glow-md) !important;
+}
+</style>

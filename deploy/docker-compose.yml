@@ -1,0 +1,28 @@
+services:
+  booknav:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    container_name: booknav
+    restart: unless-stopped
+    ports:
+      - "8988:8080"
+    volumes:
+      - ../data:/data
+    env_file:
+      - ../.env
+    environment:
+      BOOKNAV_ENV: production
+      BOOKNAV_HTTP_ADDR: ":8080"
+      BOOKNAV_DATA_DIR: /data
+      BOOKNAV_STATIC_DIR: /webdist
+    # Qdrant is optional — enable with: docker compose --profile ai up -d
+
+  qdrant:
+    profiles: ["ai"]
+    image: qdrant/qdrant:latest
+    container_name: booknav_qdrant
+    restart: unless-stopped
+    volumes:
+      - ../data/qdrant:/qdrant/storage
+    # ports intentionally not published in default; link via internal network
