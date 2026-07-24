@@ -1,16 +1,19 @@
-﻿<script setup lang="ts">
+<script setup lang="ts">
 import { onMounted, ref } from 'vue'
 import { apiGet, apiPost, apiDelete, apiPatch } from '@/shared/api/client'
 import { useToast } from '@/shared/composables/useToast'
 import type { Category } from '@/shared/types/models'
 import AdminTable from '../components/AdminTable.vue'
+import CategoryIconPicker from '../components/CategoryIconPicker.vue'
+import AppIcon from '@/shared/ui/AppIcon.vue'
+import { iconForCategory } from '@/shared/icons/registry'
 
 const toast = useToast()
 const categories = ref<Category[]>([])
 const loading = ref(false)
 const form = ref({
   name: '',
-  color: '#3DE7FF',
+  icon: 'folder',
   description: '',
   display_limit: 10,
   parent_id: null as number | null,
@@ -41,7 +44,7 @@ function startEdit(c: Category) {
   editingId.value = c.id
   form.value = {
     name: c.name,
-    color: c.color || '#3DE7FF',
+    icon: iconForCategory(c.icon, c.id),
     description: c.description || '',
     display_limit: c.display_limit || 10,
     parent_id: c.parent_id ?? null,
@@ -52,7 +55,7 @@ function resetForm() {
   editingId.value = null
   form.value = {
     name: '',
-    color: '#3DE7FF',
+    icon: 'folder',
     description: '',
     display_limit: 10,
     parent_id: null,
@@ -64,12 +67,19 @@ async function save() {
     toast.error('请填写名称')
     return
   }
+  const payload = {
+    name: form.value.name.trim(),
+    icon: form.value.icon || 'folder',
+    description: form.value.description,
+    display_limit: form.value.display_limit,
+    parent_id: form.value.parent_id,
+  }
   try {
     if (editingId.value) {
-      await apiPatch(`/api/v1/admin/categories/${editingId.value}`, form.value)
+      await apiPatch(`/api/v1/admin/categories/${editingId.value}`, payload)
       toast.success('已更新')
     } else {
-      await apiPost('/api/v1/admin/categories', form.value)
+      await apiPost('/api/v1/admin/categories', payload)
       toast.success('已创建')
     }
     resetForm()
@@ -98,15 +108,14 @@ onMounted(load)
     <header class="page-header">
       <div>
         <h1>分类管理</h1>
-        <p>树形分类 · 显示数量与首页 display_limit</p>
+        <p>树形分类 · Lucide 图标 · 首页展示上限</p>
       </div>
     </header>
 
-    <div class="c-card c-card__body" style="margin-bottom: 14px">
+    <div class="c-card c-card__body form-card">
       <h3 class="c-card__title">{{ editingId ? '编辑分类' : '新建分类' }}</h3>
-      <div style="display: flex; flex-wrap: wrap; gap: 8px; align-items: center">
+      <div class="form-row">
         <input v-model="form.name" class="c-input" placeholder="名称" style="max-width: 200px" />
-        <input v-model="form.color" class="c-input" type="color" style="max-width: 56px; padding: 2px" />
         <input
           v-model.number="form.display_limit"
           class="c-input"
@@ -122,14 +131,20 @@ onMounted(load)
         <button type="button" class="c-btn c-btn--primary" @click="save">
           {{ editingId ? '保存' : '创建' }}
         </button>
-        <button v-if="editingId" type="button" class="c-btn c-btn--ghost c-btn--sm" @click="resetForm">取消</button>
+        <button v-if="editingId" type="button" class="c-btn c-btn--ghost c-btn--sm" @click="resetForm">
+          取消
+        </button>
+      </div>
+      <div class="form-icon">
+        <span class="form-icon__label">图标</span>
+        <CategoryIconPicker v-model="form.icon" />
       </div>
     </div>
 
     <AdminTable :loading="loading" :is-empty="!flat(categories).length" empty="暂无分类">
       <template #head>
         <tr>
-          <th style="width: 48px">色</th>
+          <th style="width: 56px">图标</th>
           <th>名称</th>
           <th style="width: 100px">链接数</th>
           <th style="width: 100px">展示上限</th>
@@ -138,7 +153,9 @@ onMounted(load)
       </template>
       <tr v-for="c in flat(categories)" :key="c.id">
         <td>
-          <span class="swatch" :style="{ background: c.color || 'var(--energy)' }" />
+          <span class="icon-cell">
+            <AppIcon :name="iconForCategory(c.icon, c.id)" :size="18" />
+          </span>
         </td>
         <td>
           <div class="c-cell-title" :style="{ paddingLeft: `${c._depth * 14}px` }">{{ c.name }}</div>
@@ -157,11 +174,35 @@ onMounted(load)
 </template>
 
 <style scoped>
-.swatch {
-  display: inline-block;
-  width: 16px;
-  height: 16px;
-  border-radius: 2px;
-  border: 1px solid var(--stroke-dim);
+.form-card {
+  margin-bottom: 14px;
+}
+.form-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 12px;
+}
+.form-icon {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.form-icon__label {
+  font-size: 12px;
+  color: var(--text-muted);
+  letter-spacing: 0.04em;
+}
+.icon-cell {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  color: var(--energy);
+  background: rgba(61, 231, 255, 0.08);
+  border: 1px solid rgba(61, 231, 255, 0.2);
+  border-radius: 8px;
 }
 </style>

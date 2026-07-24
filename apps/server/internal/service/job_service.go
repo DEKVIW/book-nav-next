@@ -82,7 +82,7 @@ func (s *JobService) Delete(ctx context.Context, id int64) error {
 		return apperr.New(apperr.NotFound, "任务不存在")
 	}
 	if j.Status == "pending" || j.Status == "running" {
-		return apperr.New(apperr.Validation, "运行中的任务无法删除")
+		return apperr.New(apperr.Validation, "运行中的任务请先停止，再删除")
 	}
 	return s.jobs.Delete(ctx, id)
 }
@@ -91,9 +91,58 @@ func (s *JobService) ClearFinished(ctx context.Context) (int64, error) {
 	return s.jobs.DeleteFinished(ctx)
 }
 
+// Cancel requests cooperative stop of a pending/running job.
+func (s *JobService) Cancel(ctx context.Context, id int64, user *domain.User) (*domain.Job, error) {
+	if user == nil || !user.Role.IsAdmin() {
+		return nil, apperr.New(apperr.Forbidden, "需要管理员")
+	}
+	j, err := s.jobs.Get(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	if j == nil {
+		return nil, apperr.New(apperr.NotFound, "任务不存在")
+	}
+	if j.Status != "pending" && j.Status != "running" {
+		return nil, apperr.New(apperr.Validation, "只能停止进行中的任务")
+	}
+	// pending: mark cancelled immediately; running: worker will observe and exit
+	j.Status = "cancelled"
+	j.Error = "用户停止"
+	fin := clock.NowUTC()
+	j.FinishedAt = &fin
+	if err := s.jobs.Update(ctx, j); err != nil {
+		return nil, err
+	}
+	return j, nil
+}
+
+func (s *JobService) ensureNoActive(ctx context.Context, jobType string) error {
+	n, err := s.jobs.CountActiveByType(ctx, jobType)
+	if err != nil {
+		return err
+	}
+	if n > 0 {
+		return apperr.New(apperr.Validation, "已有相同类型的任务在运行，请等待完成或先停止后再启动")
+	}
+	return nil
+}
+
+// isCancelled reloads job; true if missing or status is cancelled.
+func (s *JobService) isCancelled(ctx context.Context, jobID int64) bool {
+	j, err := s.jobs.Get(ctx, jobID)
+	if err != nil || j == nil {
+		return true
+	}
+	return j.Status == "cancelled"
+}
+
 func (s *JobService) StartDeadlinkCheck(ctx context.Context, user *domain.User) (*domain.Job, error) {
 	if user == nil || !user.Role.IsSuperAdmin() {
 		return nil, apperr.New(apperr.Forbidden, "需要超级管理员")
+	}
+	if err := s.ensureNoActive(ctx, "deadlink_check"); err != nil {
+		return nil, err
 	}
 	uid := user.ID
 	batch := uuid.NewString()
@@ -116,6 +165,9 @@ func (s *JobService) StartIconFetch(ctx context.Context, user *domain.User) (*do
 	if user == nil || !user.Role.IsSuperAdmin() {
 		return nil, apperr.New(apperr.Forbidden, "需要超级管理员")
 	}
+	if err := s.ensureNoActive(ctx, "icon_sync"); err != nil {
+		return nil, err
+	}
 	uid := user.ID
 	j := &domain.Job{
 		Type:        "icon_sync",
@@ -135,6 +187,9 @@ func (s *JobService) StartIconFetch(ctx context.Context, user *domain.User) (*do
 func (s *JobService) StartVectorIndex(ctx context.Context, user *domain.User) (*domain.Job, error) {
 	if user == nil || !user.Role.IsSuperAdmin() {
 		return nil, apperr.New(apperr.Forbidden, "需要超级管理员")
+	}
+	if err := s.ensureNoActive(ctx, "vector_index"); err != nil {
+		return nil, err
 	}
 	if s.settings == nil {
 		return nil, apperr.New(apperr.Validation, "设置服务不可用")
@@ -265,6 +320,9 @@ func (s *JobService) runVectorIndex(jobID int64) {
 	_ = s.jobs.Update(ctx, j)
 
 	for i, site := range sites {
+		if s.isCancelled(ctx, jobID) {
+			return
+		}
 		text := buildWebsiteEmbedText(site)
 		emb, err := client.Embed(ctx, text)
 		if err != nil {
@@ -285,7 +343,14 @@ func (s *JobService) runVectorIndex(jobID int64) {
 			j.Success++
 		}
 		j.Progress = i + 1
+		// preserve cancelled if Cancel() raced
+		if s.isCancelled(ctx, jobID) {
+			return
+		}
 		_ = s.jobs.Update(ctx, j)
+	}
+	if s.isCancelled(ctx, jobID) {
+		return
 	}
 	fin := clock.NowUTC()
 	j.FinishedAt = &fin
@@ -336,6 +401,9 @@ func (s *JobService) runDeadlink(jobID int64, batch string) {
 	_ = s.jobs.Update(ctx, j)
 
 	for i, site := range sites {
+		if s.isCancelled(ctx, jobID) {
+			return
+		}
 		valid, code, errType, errMsg, ms := s.checkURL(site.URL)
 		sc := code
 		rt := ms
@@ -359,7 +427,13 @@ func (s *JobService) runDeadlink(jobID int64, batch string) {
 			j.Failed++
 		}
 		j.Progress = i + 1
+		if s.isCancelled(ctx, jobID) {
+			return
+		}
 		_ = s.jobs.Update(ctx, j)
+	}
+	if s.isCancelled(ctx, jobID) {
+		return
 	}
 	fin := clock.NowUTC()
 	j.FinishedAt = &fin
@@ -393,33 +467,56 @@ func (s *JobService) runIconFetch(jobID int64) {
 	iconDir := filepath.Join(s.dataDir, "uploads", "icons")
 	_ = os.MkdirAll(iconDir, 0o755)
 
+	// load icon settings for source providers + sync preferences
+	providers := defaultIconSourceProviders()
+	syncLocal := true
+	if s.settings != nil {
+		if adminMap, err := s.settings.GetNamespaceForAdmin(ctx, "icon"); err == nil {
+			providers = mergeIconSourceProviders(adminMap["source_providers"])
+			if v, ok := adminMap["sync_local"].(bool); ok {
+				syncLocal = v
+			}
+		}
+	}
+
 	for i, site := range sites {
-		if strings.TrimSpace(site.Icon) != "" && !strings.HasPrefix(site.Icon, "http") {
+		if s.isCancelled(ctx, jobID) {
+			return
+		}
+		// already local media path — skip
+		if strings.TrimSpace(site.Icon) != "" && strings.HasPrefix(site.Icon, "/media/") {
 			j.Success++
 			j.Progress = i + 1
 			_ = s.jobs.Update(ctx, j)
 			continue
 		}
-		iconURL, err := s.discoverIcon(site.URL)
+		iconURL, err := s.discoverIconWithProviders(site.URL, providers)
 		if err != nil || iconURL == "" {
 			j.Failed++
 			j.Progress = i + 1
 			_ = s.jobs.Update(ctx, j)
 			continue
 		}
-		local, err := s.downloadIcon(iconURL, iconDir)
-		if err != nil {
-			// keep remote url
-			site.Icon = iconURL
-			_ = s.websites.Update(ctx, &site)
-			j.Success++
+		if syncLocal {
+			local, err := s.downloadIcon(iconURL, iconDir)
+			if err != nil {
+				site.Icon = iconURL
+			} else {
+				site.Icon = "/media/icons/" + filepath.Base(local)
+			}
 		} else {
-			site.Icon = "/media/icons/" + filepath.Base(local)
-			_ = s.websites.Update(ctx, &site)
-			j.Success++
+			site.Icon = iconURL
 		}
+		_ = s.websites.Update(ctx, &site)
+		j.Success++
 		j.Progress = i + 1
+		if s.isCancelled(ctx, jobID) {
+			return
+		}
 		_ = s.jobs.Update(ctx, j)
+	}
+	if s.isCancelled(ctx, jobID) {
+		return
 	}
 	fin := clock.NowUTC()
 	j.FinishedAt = &fin

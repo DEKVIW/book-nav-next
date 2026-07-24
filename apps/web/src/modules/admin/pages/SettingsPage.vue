@@ -1,9 +1,12 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { apiDelete, apiGet, apiPost, apiPut } from '@/shared/api/client'
 import { useToast } from '@/shared/composables/useToast'
 
 const toast = useToast()
+const route = useRoute()
+const router = useRouter()
 const loading = ref(false)
 const saving = ref(false)
 const testing = ref(false)
@@ -13,13 +16,26 @@ const testingTasks = ref(false)
 const testResult = ref<{ ok?: boolean; message?: string; details?: Record<string, string> } | null>(null)
 
 type TabKey = 'basic' | 'transition' | 'ai' | 'vector'
-const tab = ref<TabKey>('basic')
 const tabs: { key: TabKey; label: string }[] = [
   { key: 'basic', label: '基本设置' },
   { key: 'transition', label: '过渡页' },
   { key: 'ai', label: 'AI 配置' },
   { key: 'vector', label: '向量配置' },
 ]
+const tabKeys = new Set(tabs.map((t) => t.key))
+const tab = ref<TabKey>('basic')
+
+function applyTabFromQuery() {
+  const q = String(route.query.tab || '')
+  if (tabKeys.has(q as TabKey)) tab.value = q as TabKey
+}
+
+function setTab(key: TabKey) {
+  tab.value = key
+  router.replace({ query: { ...route.query, tab: key } })
+}
+
+watch(() => route.query.tab, applyTabFromQuery)
 
 const site = reactive({
   name: '',
@@ -367,7 +383,7 @@ async function startVectorIndex() {
   indexing.value = true
   try {
     const j = await apiPost<{ id: number }>('/api/v1/admin/jobs/vector-index')
-    toast.success(`向量索引任务 #${j.id} 已启动（顶栏「任务」查看进度）`)
+    toast.success(`向量索引任务 #${j.id} 已启动（任务中心查看进度）`)
   } catch (e: unknown) {
     toast.error(e instanceof Error ? e.message : '启动失败')
   } finally {
@@ -401,7 +417,10 @@ function statusClass(st: string) {
   return 'chip'
 }
 
-onMounted(load)
+onMounted(() => {
+  applyTabFromQuery()
+  load()
+})
 </script>
 
 <template>
@@ -428,7 +447,7 @@ onMounted(load)
             type="button"
             class="c-tabs__item"
             :class="{ active: tab === t.key }"
-            @click="tab = t.key"
+            @click="setTab(t.key)"
           >
             {{ t.label }}
           </button>

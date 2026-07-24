@@ -2,8 +2,7 @@
 import { computed, ref, watch } from 'vue'
 import { RouterLink, RouterView, useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/shared/stores/auth'
-import MechaIcon from '@/shared/ui/MechaIcon.vue'
-import type { MechaIconName } from '@/shared/mecha/icons'
+import AppIcon from '@/shared/ui/AppIcon.vue'
 
 const auth = useAuthStore()
 const route = useRoute()
@@ -21,13 +20,13 @@ watch(
   },
 )
 
-type NavItem = { to: string; label: string; icon: MechaIconName; super?: boolean }
+type NavItem = { to: string; label: string; icon: string; super?: boolean }
 
 const menuItems = computed<NavItem[]>(() => [
-  { to: '/admin/settings', label: '站点设置', icon: 'gear', super: true },
+  { to: '/admin/settings', label: '站点设置', icon: 'settings', super: true },
   { to: '/admin/categories', label: '分类管理', icon: 'folder' },
   { to: '/admin/websites', label: '链接管理', icon: 'globe' },
-  { to: '/admin/users', label: '用户管理', icon: 'people', super: true },
+  { to: '/admin/users', label: '用户管理', icon: 'users', super: true },
   { to: '/admin/data', label: '数据管理', icon: 'server', super: true },
   { to: '/admin/icons', label: '图标管理', icon: 'image', super: true },
   { to: '/admin/backups', label: '备份管理', icon: 'archive', super: true },
@@ -53,9 +52,8 @@ const pageTitle = computed(() => {
     '/admin/data': '数据管理',
     '/admin/icons': '图标管理',
     '/admin/backups': '备份管理',
-    '/admin/deadlinks': '死链检测',
     '/admin/logs': '操作日志',
-    '/admin/jobs': '任务',
+    '/admin/jobs': '任务中心',
   }
   const path = route.path
   const keys = Object.keys(map).sort((a, b) => b.length - a.length)
@@ -89,7 +87,7 @@ async function logout() {
           aria-label="菜单"
           @click="mobileOpen = !mobileOpen"
         >
-          <MechaIcon name="list" :size="20" />
+          <AppIcon name="menu" :size="20" />
         </button>
         <RouterLink to="/admin" class="admin-brand">后台管理</RouterLink>
         <span class="admin-topbar__sep">/</span>
@@ -97,19 +95,19 @@ async function logout() {
       </div>
       <div class="admin-topbar__right">
         <RouterLink class="admin-top-link" to="/" title="前台">
-          <MechaIcon name="house" :size="16" />
+          <AppIcon name="home" :size="16" />
           <span class="admin-top-link__text">前台</span>
         </RouterLink>
-        <RouterLink class="admin-top-link" to="/admin/jobs" title="任务">
-          <MechaIcon name="activity" :size="16" />
-          <span class="admin-top-link__text">任务</span>
+        <RouterLink class="admin-top-link" to="/admin/jobs" title="任务中心">
+          <AppIcon name="activity" :size="16" />
+          <span class="admin-top-link__text">任务中心</span>
         </RouterLink>
         <div class="admin-user" :title="auth.user?.email">
           <span class="admin-user__avatar">{{ initial }}</span>
           <span class="admin-user__name">{{ auth.user?.username }}</span>
         </div>
         <button type="button" class="admin-top-link" @click="logout">
-          <MechaIcon name="box-arrow-right" :size="16" />
+          <AppIcon name="log-out" :size="16" />
           <span class="admin-top-link__text">退出</span>
         </button>
       </div>
@@ -123,7 +121,7 @@ async function logout() {
           :class="{ active: isActive('/admin') }"
           title="仪表盘"
         >
-          <MechaIcon name="speedometer" :size="18" />
+          <AppIcon name="layout-dashboard" :size="18" />
           <span class="admin-nav-text">仪表盘</span>
         </RouterLink>
       </div>
@@ -137,7 +135,7 @@ async function logout() {
           :class="{ active: isActive(item.to) }"
           :title="item.label"
         >
-          <MechaIcon :name="item.icon" :size="18" />
+          <AppIcon :name="item.icon" :size="18" />
           <span class="admin-nav-text">{{ item.label }}</span>
         </RouterLink>
       </nav>
@@ -149,7 +147,7 @@ async function logout() {
           :title="collapsed ? '展开' : '收起'"
           @click="collapsed = !collapsed"
         >
-          <MechaIcon :name="collapsed ? 'chevron-right' : 'chevron-left'" :size="16" />
+          <AppIcon :name="collapsed ? 'chevrons-right' : 'chevrons-left'" :size="16" />
           <span class="admin-nav-text">{{ collapsed ? '展开' : '收起' }}</span>
         </button>
       </div>

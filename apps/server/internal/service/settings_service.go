@@ -97,13 +97,14 @@ func (s *SettingsService) EnsureDefaults(ctx context.Context) error {
 			"remember_days": 7,
 		},
 		"icon": {
-			"display_mode":       "smart",
-			"auto_fetch":         true,
-			"sync_local":         true,
-			"sync_imagebed":      false,
-			"imagebed_provider":  "",
-			"imagebed_api_url":   "",
-			"imagebed_token":     "",
+			"display_mode":      "smart",
+			"auto_fetch":        true,
+			"sync_local":        true,
+			"sync_imagebed":     false,
+			"imagebed_provider": "",
+			"imagebed_api_url":  "",
+			"imagebed_token":    "",
+			"source_providers":  defaultIconSourceProviders(),
 		},
 	}
 
@@ -188,6 +189,10 @@ func (s *SettingsService) GetNamespaceForAdmin(ctx context.Context, ns string) (
 			continue
 		}
 		out[k] = decoded
+	}
+	// icon: always return merged source providers for UI
+	if ns == "icon" {
+		out["source_providers"] = mergeIconSourceProviders(out["source_providers"])
 	}
 	return out, nil
 }
@@ -280,7 +285,8 @@ func (s *SettingsService) AIEnabled(ctx context.Context) (enabled, allowAnon boo
 
 func isSecretKey(k string) bool {
 	k = strings.ToLower(k)
-	return k == "api_key" || k == "embedding_api_key" || strings.HasSuffix(k, "_api_key") || k == "password"
+	return k == "api_key" || k == "embedding_api_key" || k == "imagebed_token" ||
+		strings.HasSuffix(k, "_api_key") || strings.HasSuffix(k, "_token") || k == "password"
 }
 
 func decodeStr(raw json.RawMessage, def string) string {

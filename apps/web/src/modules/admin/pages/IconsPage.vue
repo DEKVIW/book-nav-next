@@ -1,8 +1,11 @@
 <script setup lang="ts">
+/**
+ * 图标管理：显示策略 + 来源提供方 + 图床 + 批量抓取
+ */
 import { onMounted, reactive, ref } from 'vue'
+import { RouterLink } from 'vue-router'
 import { apiGet, apiPost, apiPut } from '@/shared/api/client'
 import { useToast } from '@/shared/composables/useToast'
-import AdminTable from '../components/AdminTable.vue'
 
 interface Job {
   id: number
@@ -14,12 +17,23 @@ interface Job {
   failed: number
 }
 
+interface SourceProvider {
+  id: string
+  label: string
+  kind: string
+  builtin?: boolean
+  enabled: boolean
+  order: number
+  supports_download?: boolean
+  description?: string
+  template?: string
+}
+
 const toast = useToast()
-const tab = ref<'settings' | 'tasks'>('settings')
-const jobs = ref<Job[]>([])
 const running = ref(false)
 const saving = ref(false)
 const loading = ref(true)
+const lastJob = ref<Job | null>(null)
 
 const icon = reactive({
   display_mode: 'smart',
@@ -32,19 +46,31 @@ const icon = reactive({
   imagebed_token_configured: false,
 })
 
+const providers = ref<SourceProvider[]>([])
+
 async function loadSettings() {
-  try {
-    const raw = await apiGet<Record<string, unknown>>('/api/v1/admin/settings/icon')
-    for (const [k, v] of Object.entries(raw || {})) {
-      if (k in icon) (icon as any)[k] = v
+  const raw = await apiGet<Record<string, unknown>>('/api/v1/admin/settings/icon')
+  for (const [k, v] of Object.entries(raw || {})) {
+    if (k === 'source_providers' && Array.isArray(v)) {
+      providers.value = (v as SourceProvider[]).slice().sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
+      continue
     }
-  } catch {
-    /* defaults */
+    if (k in icon) (icon as Record<string, unknown>)[k] = v
   }
 }
 
-async function loadJobs() {
-  jobs.value = ((await apiGet('/api/v1/admin/jobs')) || []).filter((j: Job) => j.type === 'icon_sync')
+async function loadLastJob() {
+  try {
+    const list = ((await apiGet('/api/v1/admin/jobs')) || []) as Job[]
+    lastJob.value = list.find((j) => j.type === 'icon_sync') || null
+    if (lastJob.value && (lastJob.value.status === 'running' || lastJob.value.status === 'pending')) {
+      running.value = true
+    } else {
+      running.value = false
+    }
+  } catch {
+    lastJob.value = null
+  }
 }
 
 async function saveSettings() {
@@ -57,6 +83,10 @@ async function saveSettings() {
       sync_imagebed: icon.sync_imagebed,
       imagebed_provider: icon.imagebed_provider,
       imagebed_api_url: icon.imagebed_api_url,
+      source_providers: providers.value.map((p, i) => ({
+        ...p,
+        order: (i + 1) * 10,
+      })),
     }
     const tok = String(icon.imagebed_token || '')
     if (tok && !tok.startsWith('****') && tok !== '********') {
@@ -72,21 +102,37 @@ async function saveSettings() {
   }
 }
 
-async function start() {
+function moveProvider(idx: number, dir: -1 | 1) {
+  const j = idx + dir
+  if (j < 0 || j >= providers.value.length) return
+  const arr = providers.value.slice()
+  const t = arr[idx]
+  arr[idx] = arr[j]
+  arr[j] = t
+  providers.value = arr.map((p, i) => ({ ...p, order: (i + 1) * 10 }))
+}
+
+async function startBatch() {
   try {
     const j = await apiPost<Job>('/api/v1/admin/jobs/icons')
     toast.success(`任务 #${j.id} 已启动`)
     running.value = true
-    tab.value = 'tasks'
+    lastJob.value = j
     const poll = async () => {
-      const cur = await apiGet<Job>(`/api/v1/admin/jobs/${j.id}`)
-      await loadJobs()
-      if (cur.status === 'completed' || cur.status === 'failed') {
+      try {
+        const cur = await apiGet<Job>(`/api/v1/admin/jobs/${j.id}`)
+        lastJob.value = cur
+        if (cur.status === 'completed' || cur.status === 'failed' || cur.status === 'cancelled') {
+          running.value = false
+          const msg =
+            cur.status === 'completed' ? '图标抓取完成' : cur.status === 'cancelled' ? '已停止' : '图标抓取失败'
+          toast.success(msg)
+          return
+        }
+        setTimeout(poll, 2000)
+      } catch {
         running.value = false
-        toast.success(cur.status === 'completed' ? '图标任务完成' : '图标任务失败')
-        return
       }
-      setTimeout(poll, 1500)
     }
     poll()
   } catch (e: unknown) {
@@ -97,7 +143,9 @@ async function start() {
 onMounted(async () => {
   loading.value = true
   try {
-    await Promise.all([loadSettings(), loadJobs()])
+    await Promise.all([loadSettings(), loadLastJob()])
+  } catch (e: unknown) {
+    toast.error(e instanceof Error ? e.message : '加载失败')
   } finally {
     loading.value = false
   }
@@ -109,142 +157,129 @@ onMounted(async () => {
     <header class="page-header">
       <div>
         <h1>图标管理</h1>
-        <p>显示策略、自动抓取与批量任务</p>
+        <p>显示策略、来源提供方与批量抓取</p>
       </div>
       <div class="page-header__actions">
-        <button
-          v-if="tab === 'settings'"
-          type="button"
-          class="c-btn c-btn--primary"
-          :disabled="saving"
-          @click="saveSettings"
-        >
+        <RouterLink class="c-btn c-btn--ghost c-btn--sm" to="/admin/jobs">任务中心</RouterLink>
+        <button type="button" class="c-btn c-btn--ghost" :disabled="saving" @click="saveSettings">
           {{ saving ? '保存中…' : '保存设置' }}
         </button>
-        <button type="button" class="c-btn c-btn--primary" :disabled="running" @click="start">
-          {{ running ? '运行中…' : '批量抓取' }}
+        <button type="button" class="c-btn c-btn--primary" :disabled="running" @click="startBatch">
+          {{ running ? '抓取中…' : '批量抓取' }}
         </button>
       </div>
     </header>
 
     <div v-if="loading" class="c-empty">加载中…</div>
     <template v-else>
-      <div class="settings-layout">
-        <div class="c-tabs" role="tablist">
-          <button
-            type="button"
-            class="c-tabs__item"
-            :class="{ active: tab === 'settings' }"
-            @click="tab = 'settings'"
-          >
-            全局设置
-          </button>
-          <button
-            type="button"
-            class="c-tabs__item"
-            :class="{ active: tab === 'tasks' }"
-            @click="tab = 'tasks'"
-          >
-            批量任务
-          </button>
+      <section class="c-card c-card__body">
+        <h3 class="c-card__title">显示与自动抓取</h3>
+        <div class="c-form c-form--2col">
+          <label>
+            前台显示优先级
+            <select v-model="icon.display_mode" class="c-input">
+              <option value="smart">智能（优先本地，自动回退）</option>
+              <option value="source">优先源站图标</option>
+              <option value="local">优先本地缓存</option>
+              <option value="imagebed">优先图床</option>
+            </select>
+          </label>
+          <div class="check-stack">
+            <label class="row-check">
+              <input v-model="icon.auto_fetch" type="checkbox" />
+              新建链接时自动获取图标
+            </label>
+            <label class="row-check">
+              <input v-model="icon.sync_local" type="checkbox" />
+              抓取成功后保存到本地
+            </label>
+            <label class="row-check">
+              <input v-model="icon.sync_imagebed" type="checkbox" />
+              抓取成功后上传图床
+            </label>
+          </div>
         </div>
+      </section>
 
-        <div class="settings-panel">
-          <section v-show="tab === 'settings'" class="c-card c-card__body panel-card">
-            <h3 class="c-card__title">显示与自动抓取</h3>
-            <div class="c-form c-form--2col">
-              <label>
-                前台显示优先级
-                <select v-model="icon.display_mode" class="c-input">
-                  <option value="smart">智能（优先本地，自动回退）</option>
-                  <option value="source">优先源站图标</option>
-                  <option value="local">优先本地缓存</option>
-                  <option value="imagebed">优先图床</option>
-                </select>
-              </label>
-              <label class="row-check">
-                <input v-model="icon.auto_fetch" type="checkbox" /> 新建链接时自动获取图标
-              </label>
-              <label class="row-check">
-                <input v-model="icon.sync_local" type="checkbox" /> 抓取成功后保存到本地
-              </label>
-              <label class="row-check">
-                <input v-model="icon.sync_imagebed" type="checkbox" /> 抓取成功后上传图床
-              </label>
-            </div>
-
-            <div class="nested-card">
-              <h4 class="nested-card__title">图床（可选）</h4>
-              <div class="c-form c-form--2col">
-                <label>
-                  提供方
-                  <input v-model="icon.imagebed_provider" class="c-input" placeholder="如 lsky / smms" />
-                </label>
-                <label>
-                  API 地址
-                  <input v-model="icon.imagebed_api_url" class="c-input" placeholder="https://" />
-                </label>
-                <label class="span-2">
-                  Token
-                  <input
-                    v-model="icon.imagebed_token"
-                    class="c-input"
-                    type="password"
-                    :placeholder="icon.imagebed_token_configured ? '已配置，留空不修改' : ''"
-                    autocomplete="new-password"
-                  />
-                </label>
+      <section class="c-card c-card__body">
+        <h3 class="c-card__title">来源提供方</h3>
+        <p class="field-hint">按顺序尝试：原站解析 → 已启用的代理服务。仅启用且靠前的会参与抓取。</p>
+        <div class="provider-list">
+          <div v-for="(p, idx) in providers" :key="p.id" class="provider-row">
+            <label class="row-check provider-enable">
+              <input v-model="p.enabled" type="checkbox" />
+            </label>
+            <div class="provider-meta">
+              <div class="provider-name">
+                <strong>{{ p.label }}</strong>
+                <span class="provider-id">{{ p.id }}</span>
+                <span class="c-tag">{{ p.kind === 'origin' ? '原站' : '代理' }}</span>
               </div>
+              <div class="provider-desc">{{ p.description || p.template || '—' }}</div>
             </div>
-          </section>
-
-          <section v-show="tab === 'tasks'" class="panel-card">
-            <AdminTable :is-empty="!jobs.length" empty="暂无图标任务">
-              <template #head>
-                <tr>
-                  <th class="c-col-id">ID</th>
-                  <th>状态</th>
-                  <th>进度</th>
-                  <th>成功</th>
-                  <th>失败</th>
-                </tr>
-              </template>
-              <tr v-for="j in jobs" :key="j.id">
-                <td>{{ j.id }}</td>
-                <td><span class="c-tag">{{ j.status }}</span></td>
-                <td>{{ j.progress }}/{{ j.total }}</td>
-                <td>{{ j.success }}</td>
-                <td>{{ j.failed }}</td>
-              </tr>
-            </AdminTable>
-          </section>
+            <div class="provider-actions">
+              <button type="button" class="c-btn c-btn--ghost c-btn--sm" :disabled="idx === 0" @click="moveProvider(idx, -1)">
+                上移
+              </button>
+              <button
+                type="button"
+                class="c-btn c-btn--ghost c-btn--sm"
+                :disabled="idx === providers.length - 1"
+                @click="moveProvider(idx, 1)"
+              >
+                下移
+              </button>
+            </div>
+          </div>
         </div>
-      </div>
+      </section>
+
+      <section class="c-card c-card__body">
+        <h3 class="c-card__title">图床（可选）</h3>
+        <p class="field-hint">开启「上传图床」后生效；Token 已配置时留空表示不修改。</p>
+        <div class="c-form c-form--2col">
+          <label>
+            提供方
+            <input v-model="icon.imagebed_provider" class="c-input" placeholder="如 lsky / smms" />
+          </label>
+          <label>
+            API 地址
+            <input v-model="icon.imagebed_api_url" class="c-input" placeholder="https://" />
+          </label>
+          <label class="span-2">
+            Token
+            <input
+              v-model="icon.imagebed_token"
+              class="c-input"
+              type="password"
+              :placeholder="icon.imagebed_token_configured ? '已配置，留空不修改' : '可选'"
+              autocomplete="new-password"
+            />
+          </label>
+        </div>
+      </section>
+
+      <section v-if="lastJob" class="c-card c-card__body">
+        <div class="job-card__row">
+          <div>
+            <h3 class="c-card__title" style="margin-bottom: 4px">最近图标任务</h3>
+            <p class="field-hint" style="margin: 0">
+              #{{ lastJob.id }} · {{ lastJob.status }} · {{ lastJob.progress }}/{{ lastJob.total }} · 成功
+              {{ lastJob.success }} / 失败 {{ lastJob.failed }}
+            </p>
+          </div>
+          <RouterLink class="c-btn c-btn--ghost c-btn--sm" to="/admin/jobs">查看全部</RouterLink>
+        </div>
+      </section>
     </template>
   </div>
 </template>
 
 <style scoped>
-.settings-layout {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
-.panel-card {
-  margin: 0;
-}
-.row-check {
-  display: flex !important;
-  flex-direction: row !important;
-  align-items: center;
-  gap: 8px;
-  cursor: pointer;
-  padding-top: 22px;
-}
 .c-form--2col {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 12px 16px;
+  gap: 14px 18px;
 }
 .c-form--2col label {
   display: flex;
@@ -256,12 +291,82 @@ onMounted(async () => {
 .c-form--2col .span-2 {
   grid-column: 1 / -1;
 }
+.check-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  justify-content: center;
+}
+.row-check {
+  display: flex !important;
+  flex-direction: row !important;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--console-text);
+}
+.field-hint {
+  margin: 0 0 12px;
+  font-size: 12px;
+  color: var(--console-text-3);
+  line-height: 1.45;
+}
+.provider-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.provider-row {
+  display: grid;
+  grid-template-columns: 28px 1fr auto;
+  gap: 12px;
+  align-items: center;
+  padding: 10px 12px;
+  border: 1px solid var(--console-border);
+  border-radius: var(--console-radius, 8px);
+  background: rgba(0, 0, 0, 0.12);
+}
+.provider-enable {
+  padding: 0 !important;
+}
+.provider-name {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 2px;
+}
+.provider-id {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 11px;
+  color: var(--console-text-3);
+}
+.provider-desc {
+  font-size: 12px;
+  color: var(--console-text-3);
+  word-break: break-all;
+}
+.provider-actions {
+  display: flex;
+  gap: 6px;
+}
+.job-card__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
 @media (max-width: 960px) {
   .c-form--2col {
     grid-template-columns: 1fr;
   }
-  .row-check {
-    padding-top: 0;
+  .provider-row {
+    grid-template-columns: 28px 1fr;
+  }
+  .provider-actions {
+    grid-column: 2;
   }
 }
 </style>

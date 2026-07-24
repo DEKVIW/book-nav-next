@@ -13,6 +13,8 @@ import ContextMenu from '@/modules/portal/components/ContextMenu.vue'
 import WebsiteFormModal from '@/modules/portal/components/WebsiteFormModal.vue'
 import DuplicateDialog from '@/modules/portal/components/DuplicateDialog.vue'
 import AnnouncementModal from '@/modules/portal/components/AnnouncementModal.vue'
+import AppIcon from '@/shared/ui/AppIcon.vue'
+import { iconForCategory } from '@/shared/icons/registry'
 import { useAuthStore } from '@/shared/stores/auth'
 import { usePortalStore } from '@/shared/stores/portal'
 import { useToast } from '@/shared/composables/useToast'
@@ -370,16 +372,38 @@ async function onFetchMeta(url: string) {
   }
 }
 
+/**
+ * 对齐旧站 index.html 卡片：
+ *   <a href="/goto/id 或 直达" target="_blank">
+ * - 始终新标签打开
+ * - 开过渡：新标签 → /goto/:id（访问计数在 GotoPage 的 visit）
+ * - 不开过渡 / 用户选过不再显示：新标签直接目标 URL
+ * 过渡页内：location.replace 同标签离开（见 GotoPage）
+ */
 async function openSite(site: Website) {
+  let skip = false
+  try {
+    skip = localStorage.getItem('booknav_skip_transition') === '1'
+  } catch {
+    /* ignore */
+  }
+
+  const settings = portal.settings
+  const enableTransition = !!settings?.enable_transition
+  // 访客倒计时；管理员倒计时由后端 visit 再算，前端用公共 settings 近似
+  const countdown = settings?.transition_time ?? 0
+
+  if (enableTransition && countdown > 0 && !skip) {
+    // 仅开过渡页；计数留给 /goto 内 visit，避免双计
+    window.open(`${location.origin}/goto/${site.id}`, '_blank', 'noopener,noreferrer')
+    return
+  }
+
   try {
     const data = await portal.visit(site.id)
-    if (data.enable_transition && data.countdown > 0) {
-      router.push(`/goto/${site.id}`)
-      return
-    }
-    window.open(data.website.url || site.url, '_blank', 'noopener')
+    window.open(data.website?.url || site.url, '_blank', 'noopener,noreferrer')
   } catch {
-    window.open(site.url, '_blank', 'noopener')
+    window.open(site.url, '_blank', 'noopener,noreferrer')
   }
 }
 
@@ -487,8 +511,9 @@ function scrollTop() {
       <!-- 搜索结果 -->
       <section v-if="portal.searchResults" class="search-layer">
         <header class="bay-header">
-          <span class="bay-header__code">SEARCH</span>
-          <span class="bay-header__stripe" style="background: var(--magenta)" />
+          <span class="bay-header__icon bay-header__icon--magenta">
+            <AppIcon name="search" :size="18" />
+          </span>
           <h2 class="bay-header__title">搜索结果</h2>
           <span class="bay-header__meta">
             {{ portal.searchQuery }} · {{ portal.searchResults.length }} 条
@@ -512,8 +537,9 @@ function scrollTop() {
         <!-- 精选 -->
         <section v-if="portal.featured.length" class="featured">
           <header class="bay-header">
-            <span class="bay-header__code">FEAT</span>
-            <span class="bay-header__stripe" style="background: var(--amber)" />
+            <span class="bay-header__icon bay-header__icon--amber">
+              <AppIcon name="star" :size="18" />
+            </span>
             <h2 class="bay-header__title">精选</h2>
             <span class="bay-header__meta">{{ portal.featured.length }}</span>
           </header>
@@ -530,26 +556,26 @@ function scrollTop() {
 
         <!-- 分类舱段 -->
         <section
-          v-for="(cat, idx) in displayCategories"
+          v-for="cat in displayCategories"
           :id="`cat-${cat.id}`"
           :key="cat.id"
           class="category-section"
         >
           <header class="bay-header">
-            <span class="bay-header__code">BAY-{{ String(idx + 1).padStart(2, '0') }}</span>
-            <span class="bay-header__stripe" :style="{ background: cat.color || 'var(--energy)' }" />
+            <span class="bay-header__icon">
+              <AppIcon :name="iconForCategory(cat.icon, cat.id)" :size="18" />
+            </span>
             <h2 class="bay-header__title">{{ cat.name }}</h2>
             <span class="bay-header__meta">
-              显示 {{ sitesFor(cat).length }} / {{ totalFor(cat) }}
+              {{ sitesFor(cat).length }} / {{ totalFor(cat) }}
             </span>
-            <!-- 展开 / 收起：市面导航「看全部」标准做法 -->
             <button
               v-if="totalFor(cat) > limitOf(cat)"
               type="button"
               class="m-btn m-btn--ghost expand-btn"
               @click="isExpanded(cat) ? collapseCategory(cat) : expandCategory(cat)"
             >
-              {{ isExpanded(cat) ? '收起' : `展开全部 (${totalFor(cat)})` }}
+              {{ isExpanded(cat) ? '收起' : '展开全部' }}
             </button>
           </header>
 
@@ -588,16 +614,9 @@ function scrollTop() {
           </div>
 
           <div v-if="!sitesFor(cat).length" class="empty-hint">该分类下暂无链接</div>
-
-          <!-- 底部再放一次展开，长列表更顺手 -->
-          <div v-if="totalFor(cat) > sitesFor(cat).length" class="expand-footer">
-            <button type="button" class="m-btn m-btn--primary" @click="expandCategory(cat)">
-              展开全部 {{ totalFor(cat) }} 个链接
-            </button>
-          </div>
         </section>
 
-        <p v-if="!displayCategories.length" class="state">暂无分类，请登录管理后台添加。</p>
+        <p v-if="!displayCategories.length" class="state">暂无分类</p>
       </template>
     </template>
 
@@ -645,10 +664,6 @@ function scrollTop() {
       :remember-days="portal.settings.announcement_remember_days || 7"
     />
 
-    <p v-if="auth.isAdmin" class="admin-hint">
-      管理员：在页面空白处粘贴网址 → 自动查重并抓取标题/图标 · 右键卡片 · 拖拽排序 · 展开全部查看分类下所有链接
-    </p>
-
     <button
       v-show="showTop"
       type="button"
@@ -656,7 +671,7 @@ function scrollTop() {
       aria-label="回到顶部"
       @click="scrollTop"
     >
-      ↑
+      <AppIcon name="chevron-down" :size="18" class="back-top__icon" />
     </button>
   </MechaShell>
 </template>
@@ -691,21 +706,12 @@ function scrollTop() {
   padding: 12px 0;
 }
 .expand-btn {
-  margin-left: 4px;
   height: 30px !important;
   font-size: 12px !important;
-}
-.expand-footer {
-  display: flex;
-  justify-content: center;
-  margin-top: 16px;
-}
-.admin-hint {
-  margin-top: 40px;
-  font-size: 12px;
-  color: var(--text-muted);
-  text-align: center;
-  line-height: 1.6;
+  flex-shrink: 0;
+  letter-spacing: 0.04em;
+  border-color: color-mix(in srgb, var(--energy) 35%, var(--stroke-dim)) !important;
+  color: var(--energy) !important;
 }
 .back-top {
   position: fixed;
@@ -717,6 +723,9 @@ function scrollTop() {
   padding: 0 !important;
   border-radius: 4px;
   box-shadow: var(--glow-sm);
+}
+.back-top__icon {
+  transform: rotate(180deg);
 }
 :deep(.site-card--highlight) {
   border-color: var(--energy) !important;

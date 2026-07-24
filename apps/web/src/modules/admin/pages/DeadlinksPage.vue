@@ -1,5 +1,10 @@
-﻿<script setup lang="ts">
+<script setup lang="ts">
+/**
+ * 死链检测：启动检测 + 查看失效结果
+ * 任务进度也可在任务中心统一查看
+ */
 import { onMounted, ref } from 'vue'
+import { RouterLink } from 'vue-router'
 import { apiGet, apiPost } from '@/shared/api/client'
 import { useToast } from '@/shared/composables/useToast'
 import AdminTable from '../components/AdminTable.vue'
@@ -34,8 +39,10 @@ const loading = ref(false)
 const polling = ref(false)
 
 async function loadJobs() {
-  jobs.value = (await apiGet('/api/v1/admin/jobs')) || []
-  const last = jobs.value.find((j) => j.type === 'deadlink_check')
+  jobs.value = ((await apiGet('/api/v1/admin/jobs')) || []).filter(
+    (j: Job) => j.type === 'deadlink_check',
+  )
+  const last = jobs.value[0]
   if (last?.result_json) {
     try {
       const r = JSON.parse(last.result_json)
@@ -100,38 +107,44 @@ async function loadResults() {
   }
 }
 
-onMounted(loadJobs)
+onMounted(async () => {
+  await loadJobs()
+  if (batchId.value) await loadResults()
+})
 </script>
 
 <template>
-  <div>
+  <div class="admin-page">
     <header class="page-header">
       <div>
         <h1>死链检测</h1>
-        <p>批量检测链接是否可访问（SSRF 防护已启用）</p>
+        <p>批量检测链接是否可访问 · 进度可在任务中心查看</p>
       </div>
-      <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center">
+      <div class="page-header__actions">
+        <RouterLink class="c-btn c-btn--ghost c-btn--sm" to="/admin/jobs">任务中心</RouterLink>
+        <button
+          type="button"
+          class="c-btn c-btn--ghost c-btn--sm"
+          :disabled="!batchId"
+          @click="loadResults"
+        >
+          刷新失效列表
+        </button>
         <button type="button" class="c-btn c-btn--primary" :disabled="polling" @click="start">
           {{ polling ? '检测中…' : '开始检测' }}
-        </button>
-        <button type="button" class="c-btn c-btn--ghost c-btn--sm" :disabled="!batchId" @click="loadResults">
-          刷新失效列表
         </button>
       </div>
     </header>
 
-    <section class="admin-section admin-card" style="padding: 12px; margin-bottom: 12px">
-      <h3 style="margin: 0 0 8px; font-size: 13px">最近任务</h3>
-      <div v-if="!jobs.filter((j) => j.type === 'deadlink_check').length" class="c-empty">暂无任务</div>
-      <div
-        v-for="j in jobs.filter((j) => j.type === 'deadlink_check').slice(0, 5)"
-        :key="j.id"
-        class="job-line"
-      >
-        <span>#{{ j.id }}</span>
-        <span class="c-tag">{{ j.status }}</span>
-        <span>{{ j.progress }}/{{ j.total }}</span>
-        <span>ok {{ j.success }} / fail {{ j.failed }}</span>
+    <section v-if="jobs.length" class="c-card c-card__body">
+      <h3 class="c-card__title">最近检测</h3>
+      <div class="job-list">
+        <div v-for="j in jobs.slice(0, 5)" :key="j.id" class="job-line">
+          <span class="mono">#{{ j.id }}</span>
+          <span class="c-tag">{{ j.status }}</span>
+          <span class="mono">{{ j.progress }}/{{ j.total }}</span>
+          <span class="mono">ok {{ j.success }} / fail {{ j.failed }}</span>
+        </div>
       </div>
     </section>
 
@@ -140,8 +153,8 @@ onMounted(loadJobs)
         <tr>
           <th>标题</th>
           <th>URL</th>
-          <th style="width: 80px">状态码</th>
-          <th style="width: 100px">错误</th>
+          <th style="width: 88px">状态码</th>
+          <th style="width: 120px">错误</th>
         </tr>
       </template>
       <tr v-for="r in results" :key="r.id">
@@ -151,7 +164,7 @@ onMounted(loadJobs)
         <td>
           <div class="c-cell-ellipsis" :title="r.url">{{ r.url }}</div>
         </td>
-        <td>{{ r.status_code ?? '—' }}</td>
+        <td class="mono">{{ r.status_code ?? '—' }}</td>
         <td>
           <div class="c-cell-ellipsis">{{ r.error_type || '—' }}</div>
         </td>
@@ -161,17 +174,25 @@ onMounted(loadJobs)
 </template>
 
 <style scoped>
+.job-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
 .job-line {
   display: flex;
   flex-wrap: wrap;
   gap: 12px;
+  align-items: center;
   font-size: 12px;
-  font-family: var(--font-mono);
-  color: var(--text-secondary);
-  padding: 6px 0;
-  border-bottom: 1px solid var(--stroke-dim);
+  color: var(--console-text-2);
+  padding: 8px 0;
+  border-bottom: 1px solid var(--console-border);
 }
 .job-line:last-child {
   border-bottom: 0;
+}
+.mono {
+  font-family: var(--font-mono, ui-monospace, monospace);
 }
 </style>

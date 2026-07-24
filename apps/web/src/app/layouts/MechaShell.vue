@@ -1,16 +1,15 @@
 <script setup lang="ts">
 /**
- * 侧栏行为对齐旧版：
- * - 默认收起，汉堡切换（桌面+移动均有效）
- * - localStorage 记忆开关
- * - 一级锚点滚动；仅移动端点击后关闭
- * - 二级子菜单展开/收起 + 状态记忆
- * - 点击子类：滚动父舱段 + 通知主区切换 Tab
+ * Portal shell — mecha hangar HUD
+ * Desktop: always-visible rail, expanded | collapsed (icon-only)
+ * Mobile: overlay drawer
  */
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { RouterLink } from 'vue-router'
 import { useAuthStore } from '@/shared/stores/auth'
 import { usePortalStore } from '@/shared/stores/portal'
+import AppIcon from '@/shared/ui/AppIcon.vue'
+import { iconForCategory } from '@/shared/icons/registry'
 import type { Category } from '@/shared/types/models'
 
 const props = withDefaults(
@@ -31,13 +30,21 @@ const emit = defineEmits<{
 const auth = useAuthStore()
 const portal = usePortalStore()
 
-const STORAGE_SIDEBAR = 'booknav_sidebar_open'
+const STORAGE_MODE = 'booknav_sidebar_mode'
+const STORAGE_LEGACY = 'booknav_sidebar_open'
 const STORAGE_SUBMENU = 'booknav_submenu_'
 
-const sidebarOpen = ref(false)
+/** Desktop: expanded labels | collapsed icon-only. Mobile open uses expanded labels in drawer. */
+const railExpanded = ref(true)
+const mobileOpen = ref(false)
 const searchInput = ref('')
 const activeCat = ref<number | null>(null)
 const expanded = ref<Set<number>>(new Set())
+const flyoutId = ref<number | null>(null)
+/** 点击/编程滚动期间锁定选中态，避免 IntersectionObserver 在 smooth scroll 途中乱跳 */
+const activeLocked = ref(false)
+let unlockTimer: ReturnType<typeof setTimeout> | null = null
+let scrollEndHandler: (() => void) | null = null
 
 const navCats = computed(() => props.categories || portal.categories)
 const aiOn = computed({
@@ -45,42 +52,51 @@ const aiOn = computed({
   set: (v: boolean) => emit('update:useAi', v),
 })
 
-const isMobile = () => window.innerWidth < 900
+const isMobile = () => typeof window !== 'undefined' && window.innerWidth < 900
 
 function loadSidebarState() {
-  const saved = localStorage.getItem(STORAGE_SIDEBAR)
-  // 旧版默认关闭；仅明确 true 时打开
-  sidebarOpen.value = saved === 'true'
+  const mode = localStorage.getItem(STORAGE_MODE)
+  if (mode === 'collapsed' || mode === 'expanded') {
+    railExpanded.value = mode === 'expanded'
+    return
+  }
+  // migrate legacy: open=true → expanded, else collapsed icon rail
+  const legacy = localStorage.getItem(STORAGE_LEGACY)
+  railExpanded.value = legacy === 'true'
 }
 
-function persistSidebar() {
-  localStorage.setItem(STORAGE_SIDEBAR, sidebarOpen.value ? 'true' : 'false')
+function persistMode() {
+  localStorage.setItem(STORAGE_MODE, railExpanded.value ? 'expanded' : 'collapsed')
+  localStorage.setItem(STORAGE_LEGACY, railExpanded.value ? 'true' : 'false')
 }
 
-function toggleSidebar() {
-  sidebarOpen.value = !sidebarOpen.value
-  persistSidebar()
+function toggleRail() {
+  if (isMobile()) {
+    mobileOpen.value = !mobileOpen.value
+    return
+  }
+  railExpanded.value = !railExpanded.value
+  flyoutId.value = null
+  persistMode()
 }
 
-function closeSidebar() {
-  if (!sidebarOpen.value) return
-  sidebarOpen.value = false
-  persistSidebar()
+function closeMobile() {
+  mobileOpen.value = false
+  flyoutId.value = null
 }
 
-/** 仅移动端点遮罩关闭；桌面无遮罩交互 */
 function onOverlayClick() {
-  if (isMobile()) closeSidebar()
-}
-
-function openSidebar() {
-  sidebarOpen.value = true
-  persistSidebar()
+  if (isMobile()) closeMobile()
 }
 
 function toggleSubmenu(cat: Category, e?: Event) {
   e?.stopPropagation()
   e?.preventDefault()
+  if (!railExpanded.value && !isMobile()) {
+    // collapsed: toggle flyout
+    flyoutId.value = flyoutId.value === cat.id ? null : cat.id
+    return
+  }
   const next = new Set(expanded.value)
   if (next.has(cat.id)) next.delete(cat.id)
   else next.add(cat.id)
@@ -88,54 +104,85 @@ function toggleSubmenu(cat: Category, e?: Event) {
   localStorage.setItem(STORAGE_SUBMENU + cat.id, next.has(cat.id) ? 'true' : 'false')
 }
 
-function isExpanded(id: number) {
+function isSubOpen(id: number) {
+  if (!railExpanded.value && !isMobile()) return flyoutId.value === id
   return expanded.value.has(id)
 }
 
 function restoreSubmenus() {
   const set = new Set<number>()
   for (const cat of navCats.value) {
-    if (localStorage.getItem(STORAGE_SUBMENU + cat.id) === 'true') {
-      set.add(cat.id)
-    }
+    if (localStorage.getItem(STORAGE_SUBMENU + cat.id) === 'true') set.add(cat.id)
   }
   expanded.value = set
 }
 
+function lockActive(id: number) {
+  activeCat.value = id
+  activeLocked.value = true
+  if (unlockTimer) {
+    clearTimeout(unlockTimer)
+    unlockTimer = null
+  }
+  if (scrollEndHandler) {
+    window.removeEventListener('scrollend', scrollEndHandler)
+    scrollEndHandler = null
+  }
+  // smooth scroll 结束后再交给 observer；scrollend 不支持时用超时兜底
+  scrollEndHandler = () => {
+    activeLocked.value = false
+    if (unlockTimer) {
+      clearTimeout(unlockTimer)
+      unlockTimer = null
+    }
+    if (scrollEndHandler) {
+      window.removeEventListener('scrollend', scrollEndHandler)
+      scrollEndHandler = null
+    }
+  }
+  window.addEventListener('scrollend', scrollEndHandler, { once: true })
+  unlockTimer = setTimeout(() => {
+    activeLocked.value = false
+    unlockTimer = null
+    if (scrollEndHandler) {
+      window.removeEventListener('scrollend', scrollEndHandler)
+      scrollEndHandler = null
+    }
+  }, 900)
+}
+
 function scrollToCategory(id: number, opts?: { closeOnMobile?: boolean }) {
-  // 搜索中先退出搜索层
   if (portal.searchResults) {
     portal.clearSearch()
     searchInput.value = ''
   }
+  lockActive(id)
   const el = document.getElementById(`cat-${id}`)
   if (el) {
     const top = el.getBoundingClientRect().top + window.scrollY - 72
     window.scrollTo({ top, behavior: 'smooth' })
     history.replaceState(null, '', `#cat-${id}`)
-    activeCat.value = id
   }
-  // 对齐旧版：仅移动端点击导航后关闭侧栏
-  if (opts?.closeOnMobile !== false && isMobile()) {
-    closeSidebar()
-  }
+  if (opts?.closeOnMobile !== false && isMobile()) closeMobile()
 }
 
 function onRootClick(cat: Category) {
-  // 对齐旧版：点文字 = 定位；展开只靠箭头
   scrollToCategory(cat.id)
+  flyoutId.value = null
 }
 
 function onChildClick(parent: Category, child: Category) {
   scrollToCategory(parent.id)
   emit('selectSubcategory', parent.id, child.id)
-  if (isMobile()) closeSidebar()
+  flyoutId.value = null
+  if (isMobile()) closeMobile()
 }
 
 function onRootAsUncategorized(cat: Category) {
   scrollToCategory(cat.id)
   emit('selectSubcategory', cat.id, 'root')
-  if (isMobile()) closeSidebar()
+  flyoutId.value = null
+  if (isMobile()) closeMobile()
 }
 
 function onSearch(e: Event) {
@@ -145,7 +192,6 @@ function onSearch(e: Event) {
     portal.clearSearch()
     return
   }
-  // 交给首页：支持 AI 开关
   emit('search', q)
 }
 
@@ -156,27 +202,64 @@ function clearSearch() {
 
 function onKey(e: KeyboardEvent) {
   if (e.key === 'Escape') {
-    if (sidebarOpen.value) closeSidebar()
+    if (flyoutId.value != null) flyoutId.value = null
+    else if (mobileOpen.value) closeMobile()
     else if (portal.searchResults) clearSearch()
   }
 }
 
+function onDocClick(e: MouseEvent) {
+  if (flyoutId.value == null) return
+  const t = e.target as HTMLElement | null
+  if (t?.closest?.('.side-group')) return
+  flyoutId.value = null
+}
+
 let io: IntersectionObserver | null = null
+
+function pickActiveFromViewport() {
+  if (activeLocked.value) return
+  const sections = Array.from(document.querySelectorAll<HTMLElement>('[id^="cat-"]'))
+  if (!sections.length) return
+  // 顶栏下方「阅读线」：取已越过该线的 section 中 top 最大者（当前正在读的舱段）
+  const line = 72 + 24
+  let chosen: HTMLElement | null = null
+  let bestTop = -Infinity
+  for (const el of sections) {
+    const top = el.getBoundingClientRect().top
+    if (top <= line && top > bestTop) {
+      bestTop = top
+      chosen = el
+    }
+  }
+  if (!chosen) {
+    let minTop = Infinity
+    for (const el of sections) {
+      const top = el.getBoundingClientRect().top
+      if (top < minTop) {
+        minTop = top
+        chosen = el
+      }
+    }
+  }
+  if (!chosen) return
+  const id = Number(chosen.id.replace('cat-', ''))
+  if (!Number.isNaN(id) && activeCat.value !== id) {
+    activeCat.value = id
+  }
+}
 
 function bindObserver() {
   io?.disconnect()
   io = new IntersectionObserver(
-    (entries) => {
-      // 取最靠近视口上部的可见 section
-      const visible = entries
-        .filter((en) => en.isIntersecting)
-        .sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top)
-      if (visible[0]) {
-        const id = visible[0].target.id.replace('cat-', '')
-        activeCat.value = Number(id)
-      }
+    () => {
+      pickActiveFromViewport()
     },
-    { rootMargin: '-15% 0px -55% 0px', threshold: [0, 0.1, 0.3] },
+    {
+      // 宽观察带，具体选中由 pickActiveFromViewport 计算
+      rootMargin: '-10% 0px -40% 0px',
+      threshold: [0, 0.05, 0.15, 0.3, 0.5],
+    },
   )
   document.querySelectorAll('[id^="cat-"]').forEach((el) => io?.observe(el))
 }
@@ -185,7 +268,6 @@ watch(
   () => navCats.value.map((c) => c.id).join(','),
   () => {
     restoreSubmenus()
-    // DOM 更新后再绑 observer
     requestAnimationFrame(() => setTimeout(bindObserver, 50))
   },
 )
@@ -194,8 +276,8 @@ onMounted(() => {
   loadSidebarState()
   restoreSubmenus()
   window.addEventListener('keydown', onKey)
+  document.addEventListener('click', onDocClick)
   setTimeout(bindObserver, 200)
-  // hash 直达
   if (location.hash.startsWith('#cat-')) {
     const id = Number(location.hash.replace('#cat-', ''))
     if (!Number.isNaN(id)) {
@@ -206,38 +288,55 @@ onMounted(() => {
 
 onUnmounted(() => {
   window.removeEventListener('keydown', onKey)
+  document.removeEventListener('click', onDocClick)
+  if (scrollEndHandler) window.removeEventListener('scrollend', scrollEndHandler)
+  if (unlockTimer) clearTimeout(unlockTimer)
   io?.disconnect()
 })
 
-defineExpose({ openSidebar, closeSidebar, scrollToCategory })
+defineExpose({
+  openSidebar: () => {
+    if (isMobile()) mobileOpen.value = true
+    else {
+      railExpanded.value = true
+      persistMode()
+    }
+  },
+  closeSidebar: () => {
+    if (isMobile()) closeMobile()
+    else {
+      railExpanded.value = false
+      persistMode()
+    }
+  },
+  scrollToCategory,
+})
 </script>
 
 <template>
   <div
     class="shell"
     :class="{
-      'shell--sidebar-open': sidebarOpen,
+      'shell--rail-expanded': railExpanded,
+      'shell--rail-collapsed': !railExpanded,
+      'shell--mobile-open': mobileOpen,
     }"
   >
     <header class="top-rail">
+      <!-- 仅移动端：打开侧栏抽屉。桌面用侧栏底部折叠钮，不占顶栏 -->
       <button
         type="button"
-        class="m-btn m-btn--ghost m-btn--icon"
-        :aria-label="sidebarOpen ? '收起侧栏' : '展开侧栏'"
-        :aria-expanded="sidebarOpen"
-        @click="toggleSidebar"
+        class="m-btn m-btn--ghost m-btn--icon top-rail__menu"
+        :aria-label="mobileOpen ? '关闭菜单' : '打开菜单'"
+        :aria-expanded="mobileOpen"
+        @click="toggleRail"
       >
-        <span class="icon-bars" :class="{ 'icon-bars--open': sidebarOpen }" />
+        <AppIcon :name="mobileOpen ? 'x' : 'menu'" :size="18" />
       </button>
-
-      <RouterLink to="/" class="brand" @click="clearSearch">
-        <span class="brand__mark" aria-hidden="true" />
-        <span class="brand__text">{{ portal.settings?.site_name || 'BookNav' }}</span>
-      </RouterLink>
 
       <form class="search-slot" @submit="onSearch">
         <div class="radar-search">
-          <span class="radar-search__glyph" aria-hidden="true" />
+          <AppIcon name="search" :size="16" class="radar-search__icon" />
           <input
             v-model="searchInput"
             type="search"
@@ -245,12 +344,14 @@ defineExpose({ openSidebar, closeSidebar, scrollToCategory })
             placeholder="搜索网站标题、描述或链接…"
             enterkeyhint="search"
           />
-          <button v-if="searchInput" type="button" class="clear" @click="clearSearch">×</button>
+          <button v-if="searchInput" type="button" class="clear" aria-label="清除" @click="clearSearch">
+            <AppIcon name="x" :size="16" />
+          </button>
         </div>
       </form>
 
       <div class="top-rail__actions">
-        <label v-if="aiAvailable" class="ai-toggle" title="启用 AI 智能搜索（需后台配置）">
+        <label v-if="aiAvailable" class="ai-toggle" title="启用 AI 智能搜索">
           <input v-model="aiOn" type="checkbox" />
           <span>AI</span>
         </label>
@@ -269,29 +370,50 @@ defineExpose({ openSidebar, closeSidebar, scrollToCategory })
       <div class="scan-edge" aria-hidden="true" />
     </header>
 
-    <!-- 遮罩仅移动端：点遮罩关闭。桌面钉住侧栏时不盖主内容，避免误关 -->
     <div
       class="sidebar-overlay"
-      :class="{ 'sidebar-overlay--show': sidebarOpen }"
+      :class="{ 'sidebar-overlay--show': mobileOpen }"
       aria-hidden="true"
       @click="onOverlayClick"
     />
 
     <aside class="side-rail" aria-label="分类导航">
+      <!-- 站点品牌：折叠仅图标，展开图标+站名（与分类项同一节奏） -->
       <div class="side-rail__head">
-        <span class="side-rail__title">分类</span>
+        <RouterLink
+          to="/"
+          class="side-brand"
+          :title="portal.settings?.site_name || 'BookNav'"
+          @click="clearSearch"
+        >
+          <span class="side-brand__logo">
+            <img
+              v-if="portal.settings?.site_logo || portal.settings?.site_favicon"
+              :src="portal.settings?.site_logo || portal.settings?.site_favicon"
+              alt=""
+              class="side-brand__img"
+            />
+            <AppIcon v-else name="cpu" :size="20" />
+          </span>
+          <span class="side-brand__text">{{ portal.settings?.site_name || 'BookNav' }}</span>
+        </RouterLink>
         <button
           type="button"
           class="side-rail__close side-rail__close--mobile"
           aria-label="关闭"
-          @click="closeSidebar"
+          @click="closeMobile"
         >
-          ×
+          <AppIcon name="x" :size="18" />
         </button>
       </div>
 
       <nav class="side-rail__nav">
-        <div v-for="cat in navCats" :key="cat.id" class="side-group">
+        <div
+          v-for="cat in navCats"
+          :key="cat.id"
+          class="side-group"
+          :class="{ 'side-group--flyout': flyoutId === cat.id }"
+        >
           <div
             class="side-item"
             :class="{
@@ -299,11 +421,15 @@ defineExpose({ openSidebar, closeSidebar, scrollToCategory })
               'side-item--has-children': !!cat.children?.length,
             }"
           >
-            <button type="button" class="side-item__main" @click="onRootClick(cat)">
-              <span
-                class="side-item__bar"
-                :style="cat.color ? { background: cat.color } : undefined"
-              />
+            <button
+              type="button"
+              class="side-item__main"
+              :title="cat.name"
+              @click="onRootClick(cat)"
+            >
+              <span class="side-item__icon">
+                <AppIcon :name="iconForCategory(cat.icon, cat.id)" :size="18" />
+              </span>
               <span class="side-item__label">{{ cat.name }}</span>
               <span class="side-item__count">
                 {{ cat.total_count_with_children ?? cat.website_count ?? cat.websites?.length ?? 0 }}
@@ -313,17 +439,27 @@ defineExpose({ openSidebar, closeSidebar, scrollToCategory })
               v-if="cat.children?.length"
               type="button"
               class="side-item__toggle"
-              :aria-expanded="isExpanded(cat.id)"
-              :aria-label="isExpanded(cat.id) ? '收起' : '展开'"
+              :aria-expanded="isSubOpen(cat.id)"
+              :aria-label="isSubOpen(cat.id) ? '收起子分类' : '展开子分类'"
+              :title="cat.name"
               @click="toggleSubmenu(cat, $event)"
             >
-              <span class="chevron" :class="{ 'chevron--open': isExpanded(cat.id) }" />
+              <AppIcon
+                :name="railExpanded || isMobile() ? 'chevron-down' : 'chevron-right'"
+                :size="14"
+                class="side-item__chev"
+                :class="{ 'side-item__chev--open': isSubOpen(cat.id) && (railExpanded || isMobile()) }"
+              />
             </button>
           </div>
 
-          <div v-if="cat.children?.length && isExpanded(cat.id)" class="side-sub">
+          <!-- expanded / mobile inline sub -->
+          <div
+            v-if="cat.children?.length && isSubOpen(cat.id) && (railExpanded || isMobile())"
+            class="side-sub"
+          >
             <button type="button" class="side-sub__item" @click="onRootAsUncategorized(cat)">
-              未分类
+              <span>未分类</span>
               <span>{{ cat.direct_count ?? 0 }}</span>
             </button>
             <button
@@ -333,18 +469,54 @@ defineExpose({ openSidebar, closeSidebar, scrollToCategory })
               class="side-sub__item"
               @click="onChildClick(cat, ch)"
             >
-              {{ ch.name }}
+              <span>{{ ch.name }}</span>
+              <span>{{ ch.website_count ?? 0 }}</span>
+            </button>
+          </div>
+
+          <!-- collapsed flyout -->
+          <div
+            v-if="cat.children?.length && flyoutId === cat.id && !railExpanded && !isMobile()"
+            class="side-flyout hull"
+          >
+            <div class="side-flyout__title">{{ cat.name }}</div>
+            <button type="button" class="side-sub__item" @click="onRootAsUncategorized(cat)">
+              <span>未分类</span>
+              <span>{{ cat.direct_count ?? 0 }}</span>
+            </button>
+            <button
+              v-for="ch in cat.children"
+              :key="ch.id"
+              type="button"
+              class="side-sub__item"
+              @click="onChildClick(cat, ch)"
+            >
+              <span>{{ ch.name }}</span>
               <span>{{ ch.website_count ?? 0 }}</span>
             </button>
           </div>
         </div>
       </nav>
 
-      <!-- 收起固定底部 -->
       <div class="side-rail__foot">
-        <button type="button" class="side-rail__collapse" @click="closeSidebar">
-          <span class="side-rail__collapse-icon" aria-hidden="true">«</span>
-          <span>收起</span>
+        <button
+          type="button"
+          class="side-rail__collapse"
+          :title="railExpanded ? '折叠为图标' : '展开侧栏'"
+          :aria-label="railExpanded ? '折叠为图标' : '展开侧栏'"
+          @click="
+            () => {
+              if (isMobile()) closeMobile()
+              else {
+                railExpanded = !railExpanded
+                flyoutId = null
+                persistMode()
+              }
+            }
+          "
+        >
+          <AppIcon :name="railExpanded || isMobile() ? 'chevrons-left' : 'chevrons-right'" :size="18" />
+          <span class="side-rail__collapse-label">{{ railExpanded ? '收起' : '展开' }}</span>
         </button>
       </div>
     </aside>
@@ -358,11 +530,11 @@ defineExpose({ openSidebar, closeSidebar, scrollToCategory })
 <style scoped>
 .shell {
   min-height: 100vh;
-  /* 默认不占侧栏宽度，打开时通过 padding 让位（桌面） */
-  padding-left: 0;
-  transition: padding-left var(--dur-base) var(--ease-out);
+  /* desktop default: collapsed icon rail width */
+  padding-left: var(--sidebar-width-collapsed);
+  transition: padding-left var(--dur-base) var(--ease-hydraulic);
 }
-.shell--sidebar-open {
+.shell--rail-expanded {
   padding-left: var(--sidebar-width);
 }
 
@@ -376,53 +548,39 @@ defineExpose({ openSidebar, closeSidebar, scrollToCategory })
   padding: 0 var(--space-4);
   height: var(--top-rail-height);
   background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.03), transparent 60%),
-    color-mix(in srgb, var(--bg-hull) 94%, transparent);
-  backdrop-filter: blur(14px) saturate(1.2);
+    linear-gradient(180deg, rgba(255, 255, 255, 0.04), transparent 60%),
+    color-mix(in srgb, var(--bg-hull) 92%, transparent);
+  backdrop-filter: blur(16px) saturate(1.25);
   border-bottom: 1px solid var(--stroke-dim);
-  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.35);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
 }
 
-.brand {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-2);
-  text-decoration: none;
-  color: var(--text-primary);
+/* 桌面：侧栏底栏折叠即可，顶栏不放汉堡，避免左侧空一块 */
+.top-rail__menu {
+  display: none;
   flex-shrink: 0;
-}
-.brand__mark {
-  width: 22px;
-  height: 22px;
-  background: linear-gradient(135deg, var(--glow-cyan), var(--glow-magenta));
-  clip-path: polygon(20% 0, 100% 0, 80% 100%, 0 100%);
-  box-shadow: var(--glow-sm);
-}
-.brand__text {
-  font-family: var(--font-display);
-  font-weight: 700;
-  letter-spacing: 0.1em;
-  font-size: var(--text-sm);
-  max-width: 28vw;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .search-slot {
   flex: 1;
-  max-width: 480px;
-  margin: 0 auto;
+  max-width: 560px;
+  margin: 0 auto 0 0;
+}
+
+@media (min-width: 900px) {
+  .search-slot {
+    max-width: 640px;
+  }
 }
 .radar-search {
   display: flex;
   align-items: center;
   gap: var(--space-2);
-  height: 40px;
-  padding: 0 12px;
+  height: 42px;
+  padding: 0 14px;
   background: var(--bg-input);
   border: 1px solid var(--stroke-dim);
-  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.4);
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.45);
   clip-path: polygon(8px 0, 100% 0, 100% calc(100% - 8px), calc(100% - 8px) 100%, 0 100%, 0 8px);
   transition: border-color var(--dur-fast), box-shadow var(--dur-fast);
 }
@@ -431,26 +589,12 @@ defineExpose({ openSidebar, closeSidebar, scrollToCategory })
   box-shadow:
     inset 0 1px 2px rgba(0, 0, 0, 0.4),
     0 0 0 1px var(--energy-dim),
-    0 0 16px var(--energy-glow);
+    0 0 20px var(--energy-glow);
 }
-.radar-search__glyph {
-  width: 14px;
-  height: 14px;
-  border: 2px solid var(--energy);
-  border-radius: 50%;
-  opacity: 0.75;
-  position: relative;
+.radar-search__icon {
+  color: var(--energy);
+  opacity: 0.85;
   flex-shrink: 0;
-}
-.radar-search__glyph::after {
-  content: '';
-  position: absolute;
-  right: -5px;
-  bottom: -4px;
-  width: 8px;
-  height: 2px;
-  background: var(--energy);
-  transform: rotate(45deg);
 }
 .radar-search__input {
   flex: 1;
@@ -466,9 +610,13 @@ defineExpose({ openSidebar, closeSidebar, scrollToCategory })
   border: 0;
   background: transparent;
   color: var(--text-muted);
-  cursor: pointer;
-  font-size: 18px;
-  line-height: 1;
+  display: grid;
+  place-items: center;
+  padding: 2px;
+  border-radius: 4px;
+}
+.clear:hover {
+  color: var(--text-primary);
 }
 
 .top-rail__actions {
@@ -497,7 +645,6 @@ defineExpose({ openSidebar, closeSidebar, scrollToCategory })
   font-family: var(--font-display);
   letter-spacing: 0.08em;
   color: var(--text-secondary);
-  cursor: pointer;
   padding: 4px 8px;
   border: 1px solid var(--stroke-dim);
   background: var(--bg-inset);
@@ -512,154 +659,256 @@ defineExpose({ openSidebar, closeSidebar, scrollToCategory })
   accent-color: var(--magenta);
 }
 
-/* —— 侧栏：head 固定 + nav 滚动 + foot 收起固定 —— */
+/* —— Icon rail：通顶，填满左上角（顶栏只在内容区，侧栏占满左侧全高） —— */
 .side-rail {
   position: fixed;
   z-index: var(--z-sidebar);
-  top: var(--top-rail-height);
+  top: 0;
   left: 0;
   bottom: 0;
-  width: var(--sidebar-width);
+  width: var(--sidebar-width-collapsed);
   border-right: 1px solid var(--stroke-dim);
   background:
-    linear-gradient(90deg, rgba(61, 231, 255, 0.03), transparent 40%),
+    linear-gradient(180deg, rgba(61, 231, 255, 0.04), transparent 28%),
+    linear-gradient(90deg, rgba(61, 231, 255, 0.03), transparent 50%),
     color-mix(in srgb, var(--bg-hull) 97%, transparent);
-  backdrop-filter: blur(14px);
-  padding: 0;
+  backdrop-filter: blur(16px);
   display: flex;
   flex-direction: column;
-  overflow: hidden;
-  transform: translateX(-100%);
-  transition: transform var(--dur-base) var(--ease-hydraulic);
-  box-shadow: none;
+  overflow: visible;
+  transition: width var(--dur-base) var(--ease-hydraulic);
+  box-shadow: 8px 0 32px rgba(0, 0, 0, 0.35);
 }
-.shell--sidebar-open .side-rail {
-  transform: translateX(0);
-  box-shadow: 12px 0 40px rgba(0, 0, 0, 0.45);
+.shell--rail-expanded .side-rail {
+  width: var(--sidebar-width);
+  overflow: hidden;
 }
 
+/* 品牌行与顶栏同高，视觉上连成一体 */
 .side-rail__head {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  gap: 6px;
   flex-shrink: 0;
-  min-height: 48px;
-  padding: 0 var(--space-3);
+  height: var(--top-rail-height);
+  min-height: var(--top-rail-height);
+  max-height: var(--top-rail-height);
+  padding: 0 10px;
   border-bottom: 1px solid var(--stroke-dim);
+  justify-content: center;
+  box-sizing: border-box;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.04), transparent 60%),
+    color-mix(in srgb, var(--bg-hull) 97%, transparent);
 }
-.side-rail__title {
-  font-size: var(--text-sm);
+.shell--rail-expanded .side-rail__head {
+  justify-content: flex-start;
+  padding: 0 12px;
+}
+
+/* 站点品牌行 —— 折叠只 logo，展开 logo + 站名 */
+.side-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  flex: 1;
+  text-decoration: none;
   color: var(--text-primary);
-  font-weight: 600;
-  letter-spacing: 0.04em;
+  border-radius: 12px;
+  padding: 4px;
+  transition: background 0.12s;
 }
+.shell--rail-collapsed .side-brand {
+  flex: 0;
+  justify-content: center;
+  padding: 4px 0;
+}
+.side-brand:hover {
+  background: rgba(61, 231, 255, 0.06);
+}
+.side-brand__logo {
+  width: 40px;
+  height: 40px;
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  color: var(--bg-void);
+  background: linear-gradient(145deg, #a8f8ff 0%, var(--energy) 45%, #1a7a98 100%);
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow:
+    0 0 0 1px rgba(61, 231, 255, 0.35),
+    0 0 18px rgba(61, 231, 255, 0.22);
+}
+.side-brand__img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.side-brand__text {
+  font-family: var(--font-display);
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  font-size: 0.9rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+  opacity: 0;
+  width: 0;
+  max-width: 0;
+  transition:
+    opacity var(--dur-fast),
+    width var(--dur-base),
+    max-width var(--dur-base);
+}
+.shell--rail-expanded .side-brand__text {
+  opacity: 1;
+  width: auto;
+  max-width: 160px;
+}
+
 .side-rail__close {
   border: 0;
   background: transparent;
   color: var(--text-muted);
-  font-size: 20px;
-  cursor: pointer;
-  line-height: 1;
-  padding: 0 4px;
+  display: none;
+  place-items: center;
+  padding: 4px;
+  flex-shrink: 0;
 }
 .side-rail__close:hover {
   color: var(--text-primary);
-}
-.side-rail__close--mobile {
-  display: none;
 }
 
 .side-rail__nav {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
-  overflow-x: hidden;
+  overflow-x: visible;
   display: flex;
   flex-direction: column;
-  gap: 2px;
-  padding: var(--space-2);
+  gap: 4px;
+  padding: 10px 8px;
   -webkit-overflow-scrolling: touch;
 }
 
 .side-rail__foot {
   flex-shrink: 0;
   border-top: 1px solid var(--stroke-dim);
-  padding: var(--space-2);
-  background: color-mix(in srgb, var(--bg-hull) 98%, transparent);
+  padding: 10px 8px 12px;
+  display: flex;
+  justify-content: center;
 }
 .side-rail__collapse {
   width: 100%;
+  max-width: 100%;
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 8px;
-  min-height: 40px;
-  border: 0;
-  border-radius: var(--radius-sm);
-  background: transparent;
+  min-height: 44px;
+  border: 1px solid var(--stroke-dim);
+  border-radius: 12px;
+  background: var(--bg-inset);
   color: var(--text-secondary);
   font: inherit;
   font-size: var(--text-sm);
-  cursor: pointer;
-  transition: background 0.15s, color 0.15s;
+  transition:
+    background 0.15s,
+    color 0.15s,
+    border-color 0.15s,
+    box-shadow 0.15s;
 }
 .side-rail__collapse:hover {
   color: var(--text-primary);
-  background: var(--bg-panel);
+  border-color: rgba(61, 231, 255, 0.35);
+  box-shadow: 0 0 14px rgba(61, 231, 255, 0.12);
 }
-.side-rail__collapse-icon {
-  font-size: 14px;
-  line-height: 1;
-  opacity: 0.85;
+.shell--rail-collapsed .side-rail__collapse {
+  width: 44px;
+  height: 44px;
+  max-width: 44px;
+  border-radius: 12px;
+  padding: 0;
+}
+.side-rail__collapse-label {
+  display: none;
+}
+.shell--rail-expanded .side-rail__collapse-label {
+  display: inline;
+}
+
+.side-group {
+  position: relative;
 }
 
 .side-item {
   display: flex;
   align-items: stretch;
-  /* always reserve border box to avoid layout jump */
   border: 1px solid transparent;
-  border-radius: var(--radius-sm);
+  border-radius: 12px;
   background: transparent;
-  /* no box-shadow transition — prevents selected-state jitter */
-  transition: background-color 0.12s ease, border-color 0.12s ease, color 0.12s ease;
+  transition: background-color 0.12s ease, border-color 0.12s ease;
 }
 .side-item--active {
-  background: rgba(14, 28, 44, 0.85);
-  border-color: rgba(94, 240, 255, 0.28);
-  /* fixed inset highlight instead of expanding outer glow */
-  box-shadow: inset 0 0 0 1px rgba(94, 240, 255, 0.08);
+  background: rgba(61, 231, 255, 0.1);
+  border-color: rgba(61, 231, 255, 0.18);
 }
+.shell--rail-collapsed .side-item--active {
+  background: rgba(61, 231, 255, 0.14);
+  border-color: transparent;
+  border-radius: 14px;
+}
+
 .side-item__main {
   flex: 1;
   display: flex;
   align-items: center;
-  gap: var(--space-2);
+  gap: 10px;
   min-width: 0;
-  padding: var(--space-2) var(--space-2) var(--space-2) var(--space-3);
+  padding: 8px;
   border: 0;
   background: transparent;
   color: var(--text-secondary);
-  cursor: pointer;
   font: inherit;
   text-align: left;
+}
+.shell--rail-collapsed .side-item__main {
+  justify-content: center;
+  padding: 10px 0;
 }
 .side-item--active .side-item__main,
 .side-item__main:hover {
   color: var(--text-primary);
 }
-.side-item__bar {
-  width: 3px;
-  height: 16px;
+
+.side-item__icon {
+  width: 36px;
+  height: 36px;
   flex-shrink: 0;
-  background: transparent;
-  border-radius: 1px;
-  /* no shadow — color only, no size change */
-  transition: background-color 0.12s ease;
+  display: grid;
+  place-items: center;
+  color: var(--text-secondary);
+  border-radius: 10px;
+  transition:
+    color 0.12s,
+    background 0.12s,
+    box-shadow 0.12s;
 }
-.side-item--active .side-item__bar {
-  background: var(--energy);
-  box-shadow: none;
+.side-item--active .side-item__icon,
+.side-item__main:hover .side-item__icon {
+  color: var(--energy);
+  background: rgba(61, 231, 255, 0.12);
+  box-shadow: 0 0 12px rgba(61, 231, 255, 0.15);
 }
+.shell--rail-collapsed .side-item--active .side-item__icon {
+  background: rgba(61, 231, 255, 0.16);
+  color: var(--energy);
+}
+
 .side-item__label {
   flex: 1;
   font-size: var(--text-sm);
@@ -672,39 +921,38 @@ defineExpose({ openSidebar, closeSidebar, scrollToCategory })
   font-size: var(--text-xs);
   color: var(--text-muted);
 }
+.shell--rail-collapsed .side-item__label,
+.shell--rail-collapsed .side-item__count {
+  display: none;
+}
+
 .side-item__toggle {
-  width: 32px;
+  width: 28px;
   border: 0;
   background: transparent;
   color: var(--text-muted);
-  cursor: pointer;
   display: grid;
   place-items: center;
   flex-shrink: 0;
 }
+.shell--rail-collapsed .side-item__toggle {
+  display: none;
+}
 .side-item__toggle:hover {
-  color: var(--glow-cyan);
+  color: var(--energy);
 }
-.chevron {
-  width: 8px;
-  height: 8px;
-  border-right: 2px solid currentColor;
-  border-bottom: 2px solid currentColor;
-  transform: rotate(-45deg);
+.side-item__chev {
   transition: transform var(--dur-fast);
-  margin-bottom: 3px;
 }
-.chevron--open {
-  transform: rotate(45deg);
-  margin-bottom: 0;
-  margin-top: 3px;
+.side-item__chev--open {
+  transform: rotate(180deg);
 }
 
 .side-sub {
   display: flex;
   flex-direction: column;
   gap: 2px;
-  padding: 2px 0 6px 18px;
+  padding: 2px 0 8px 14px;
 }
 .side-sub__item {
   display: flex;
@@ -716,17 +964,39 @@ defineExpose({ openSidebar, closeSidebar, scrollToCategory })
   font: inherit;
   font-size: var(--text-xs);
   text-align: left;
-  padding: 6px 8px;
-  cursor: pointer;
-  border-radius: var(--radius-sm);
+  padding: 8px 10px;
+  border-radius: 8px;
 }
 .side-sub__item:hover {
   color: var(--text-primary);
   background: var(--bg-panel);
 }
-.side-sub__item span {
+.side-sub__item span:last-child {
   font-family: var(--font-mono);
   opacity: 0.8;
+}
+
+.side-flyout {
+  position: absolute;
+  left: calc(100% + 8px);
+  top: 0;
+  z-index: 80;
+  min-width: 180px;
+  max-width: 240px;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.55);
+}
+.side-flyout__title {
+  font-size: 11px;
+  font-family: var(--font-display);
+  letter-spacing: 0.08em;
+  color: var(--energy);
+  padding: 6px 10px 8px;
+  border-bottom: 1px solid var(--stroke-dim);
+  margin-bottom: 4px;
 }
 
 .viewport {
@@ -740,81 +1010,81 @@ defineExpose({ openSidebar, closeSidebar, scrollToCategory })
 
 .sidebar-overlay {
   position: fixed;
-  inset: var(--top-rail-height) 0 0 0;
+  inset: 0;
   z-index: 50;
-  background: rgba(0, 0, 0, 0.5);
+  background: rgba(0, 0, 0, 0.55);
   opacity: 0;
   pointer-events: none;
   transition: opacity var(--dur-base);
-  cursor: pointer;
 }
-/* 默认：仅移动端侧栏打开时遮罩可点关 */
 .sidebar-overlay--show {
   opacity: 1;
   pointer-events: auto;
 }
 
-/* 桌面：侧栏钉住，主内容可正常点选，绝不盖遮罩 */
 @media (min-width: 900px) {
   .sidebar-overlay,
   .sidebar-overlay--show {
     display: none !important;
-    pointer-events: none !important;
-    opacity: 0 !important;
+  }
+  .side-rail__close--mobile {
+    display: none !important;
   }
 }
 
-.icon-bars {
-  display: block;
-  width: 16px;
-  height: 2px;
-  background: currentColor;
-  box-shadow: 0 5px 0 currentColor, 0 -5px 0 currentColor;
-  transition: box-shadow var(--dur-fast), transform var(--dur-fast);
-}
-.icon-bars--open {
-  box-shadow: none;
-  transform: rotate(45deg);
-  position: relative;
-}
-.icon-bars--open::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background: currentColor;
-  transform: rotate(90deg);
-}
-
-/* 平板 */
-@media (max-width: 1100px) and (min-width: 900px) {
-  .viewport {
-    padding: var(--space-4) var(--space-5);
-  }
-  .search-slot {
-    max-width: 280px;
-  }
-}
-
-/* 手机 / 小平板 */
 @media (max-width: 899px) {
-  .shell--sidebar-open {
+  .top-rail__menu {
+    display: inline-flex;
+  }
+  .shell,
+  .shell--rail-expanded,
+  .shell--rail-collapsed {
     padding-left: 0;
+  }
+  .side-rail {
+    width: min(var(--sidebar-width), 86vw) !important;
+    transform: translateX(-105%);
+    transition: transform var(--dur-base) var(--ease-hydraulic);
+    overflow: hidden;
+  }
+  .shell--mobile-open .side-rail {
+    transform: translateX(0);
+  }
+  .side-brand__text {
+    opacity: 1 !important;
+    width: auto !important;
+    max-width: 160px !important;
+  }
+  .side-rail__head {
+    justify-content: flex-start !important;
+    padding: 0 12px !important;
+  }
+  .side-item__label,
+  .side-item__count {
+    display: initial !important;
+  }
+  .side-item__toggle {
+    display: grid !important;
+  }
+  .side-rail__collapse-label {
+    display: inline !important;
+  }
+  .side-rail__collapse {
+    width: 100% !important;
+    max-width: none !important;
+    height: auto !important;
+  }
+  .side-rail__close--mobile {
+    display: grid;
+  }
+  .side-flyout {
+    display: none !important;
   }
   .search-slot {
     max-width: none;
     flex: 1;
     min-width: 0;
   }
-  .brand__text {
-    display: none;
-  }
-  .side-rail {
-    width: min(var(--sidebar-width), 86vw);
-  }
-  .side-rail__close--mobile {
-    display: block;
-  }
-  /* 移动端底部用「收起」即可，顶栏汉堡负责打开 */
   .viewport {
     padding: var(--space-4) var(--space-3) var(--space-8);
   }

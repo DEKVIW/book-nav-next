@@ -463,6 +463,16 @@ func (h *AdminHandler) StartVectorJob(w http.ResponseWriter, r *http.Request) {
 	response.OK(w, j)
 }
 
+func (h *AdminHandler) CancelJob(w http.ResponseWriter, r *http.Request) {
+	id, _ := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
+	j, err := h.jobs.Cancel(r.Context(), id, middleware.UserFrom(r.Context()))
+	if err != nil {
+		writeErr(w, err)
+		return
+	}
+	response.OK(w, j)
+}
+
 func (h *AdminHandler) TestVector(w http.ResponseWriter, r *http.Request) {
 	var body map[string]any
 	_ = decodeJSON(r, &body)

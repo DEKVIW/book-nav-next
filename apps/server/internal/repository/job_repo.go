@@ -73,10 +73,22 @@ func (r *JobRepo) Update(ctx context.Context, j *domain.Job) error {
 	if j.FinishedAt != nil {
 		finished = j.FinishedAt.UTC().Format(time.RFC3339Nano)
 	}
+	// Do not overwrite a cancelled job with a stale running status from a worker race.
 	_, err := r.db.ExecContext(ctx, `
-UPDATE jobs SET status=?, progress=?, total=?, success=?, failed=?, payload_json=?, result_json=?, error=?, started_at=?, finished_at=?, updated_at=?
+UPDATE jobs SET
+  status = CASE WHEN status = 'cancelled' AND ? != 'cancelled' THEN status ELSE ? END,
+  progress=?, total=?, success=?, failed=?, payload_json=?, result_json=?,
+  error = CASE WHEN status = 'cancelled' AND ? != 'cancelled' THEN error ELSE ? END,
+  started_at=?,
+  finished_at = CASE WHEN status = 'cancelled' AND ? != 'cancelled' THEN finished_at ELSE ? END,
+  updated_at=?
 WHERE id=?`,
-		j.Status, j.Progress, j.Total, j.Success, j.Failed, j.PayloadJSON, j.ResultJSON, j.Error, started, finished, now, j.ID,
+		j.Status, j.Status,
+		j.Progress, j.Total, j.Success, j.Failed, j.PayloadJSON, j.ResultJSON,
+		j.Status, j.Error,
+		started,
+		j.Status, finished,
+		now, j.ID,
 	)
 	j.UpdatedAt = parseTime(now)
 	return err
@@ -88,13 +100,22 @@ func (r *JobRepo) CountRunning(ctx context.Context) (int, error) {
 	return n, err
 }
 
+// CountActiveByType counts pending/running jobs of a given type (anti-duplicate starts).
+func (r *JobRepo) CountActiveByType(ctx context.Context, jobType string) (int, error) {
+	var n int
+	err := r.db.QueryRowContext(ctx,
+		`SELECT COUNT(1) FROM jobs WHERE type = ? AND status IN ('pending','running')`, jobType,
+	).Scan(&n)
+	return n, err
+}
+
 func (r *JobRepo) Delete(ctx context.Context, id int64) error {
 	_, err := r.db.ExecContext(ctx, `DELETE FROM jobs WHERE id = ? AND status NOT IN ('pending','running')`, id)
 	return err
 }
 
 func (r *JobRepo) DeleteFinished(ctx context.Context) (int64, error) {
-	res, err := r.db.ExecContext(ctx, `DELETE FROM jobs WHERE status IN ('completed','failed')`)
+	res, err := r.db.ExecContext(ctx, `DELETE FROM jobs WHERE status IN ('completed','failed','cancelled')`)
 	if err != nil {
 		return 0, err
 	}

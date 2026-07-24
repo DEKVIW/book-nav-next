@@ -147,6 +147,7 @@ func NewRouter(d Deps) http.Handler {
 			ar.Post("/operation-logs/clear", adminH.ClearLogs)
 			ar.Get("/jobs", adminH.ListJobs)
 			ar.Get("/jobs/{id}", adminH.GetJob)
+			ar.Post("/jobs/{id}/cancel", adminH.CancelJob)
 			ar.Delete("/jobs/{id}", adminH.DeleteJob)
 			ar.Post("/jobs/clear", adminH.ClearJobs)
 

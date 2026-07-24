@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref, watch } from 'vue'
 import type { Website } from '@/shared/types/models'
 import { useCardTooltip } from '@/shared/composables/useCardTooltip'
 import { skinForId } from '@/shared/mecha/skins'
@@ -19,6 +19,17 @@ const emit = defineEmits<{
 
 const tip = useCardTooltip()
 const skin = computed(() => skinForId(props.site.id))
+/** 图片加载失败时回退字母（原先只 hide img，圆形变空） */
+const iconBroken = ref(false)
+
+watch(
+  () => props.site.icon,
+  () => {
+    iconBroken.value = false
+  },
+)
+
+const showIcon = computed(() => !!(props.site.icon && String(props.site.icon).trim() && !iconBroken.value))
 
 function letterFallback(title: string) {
   const t = title.trim()
@@ -85,12 +96,12 @@ function onLeave() {
 
     <div class="site-card__icon" aria-hidden="true">
       <img
-        v-if="site.icon"
+        v-if="showIcon"
         :src="site.icon"
         alt=""
         loading="lazy"
         referrerpolicy="no-referrer"
-        @error="($event.target as HTMLImageElement).style.display = 'none'"
+        @error="iconBroken = true"
       />
       <span v-else class="site-card__letter">{{ letterFallback(site.title) }}</span>
     </div>
@@ -117,10 +128,10 @@ function onLeave() {
   max-height: 96px;
   box-sizing: border-box;
   display: flex;
-  gap: var(--space-3);
-  align-items: flex-start;
-  padding: 12px 14px;
-  padding-right: 72px; /* reserve right for art, text stays clear */
+  gap: 14px;
+  align-items: center; /* 图标与文字垂直居中 */
+  padding: 14px 16px;
+  padding-right: 78px; /* reserve right for art */
   text-decoration: none;
   color: inherit;
   cursor: pointer;
@@ -187,29 +198,32 @@ function onLeave() {
   );
 }
 
+/* 圆形站点图标：更大、垂直居中、favicon 更清晰 */
 .site-card__icon {
   position: relative;
   z-index: 2;
-  width: 40px;
-  height: 40px;
+  width: 48px;
+  height: 48px;
   flex-shrink: 0;
   display: grid;
   place-items: center;
+  border-radius: 50%;
   background:
-    linear-gradient(135deg, color-mix(in srgb, var(--skin-accent) 18%, transparent), transparent 65%),
+    linear-gradient(145deg, color-mix(in srgb, var(--skin-accent) 22%, transparent), transparent 70%),
     var(--bg-inset);
-  border: 1px solid color-mix(in srgb, var(--skin-accent) 30%, var(--stroke-dim));
-  clip-path: polygon(5px 0, 100% 0, 100% calc(100% - 5px), calc(100% - 5px) 100%, 0 100%, 0 5px);
+  border: 1px solid color-mix(in srgb, var(--skin-accent) 35%, var(--stroke-dim));
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.2), 0 4px 12px rgba(0, 0, 0, 0.25);
   overflow: hidden;
 }
 .site-card__icon img {
   width: 100%;
   height: 100%;
   object-fit: cover;
+  border-radius: 50%;
 }
 .site-card__letter {
   font-family: var(--font-display);
-  font-size: 0.95rem;
+  font-size: 1.05rem;
   font-weight: 700;
   color: var(--skin-accent);
   text-shadow: 0 0 10px var(--skin-accent-dim);
@@ -220,6 +234,9 @@ function onLeave() {
   z-index: 2;
   min-width: 0;
   flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
   padding-top: 0;
 }
 .site-card__row {

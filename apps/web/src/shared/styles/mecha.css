@@ -2,28 +2,29 @@
  * Mecha HUD — atmosphere + structure
  */
 
-/* —— Page void + visible hangar scene (readable, not wallpaper-loud) —— */
+/* —— Hangar void: layered depth, readable content —— */
 .mecha-void {
   position: relative;
   min-height: 100vh;
-  background-color: #050a12;
+  background-color: #04080f;
   background-image:
-    radial-gradient(ellipse 100% 70% at 50% -10%, rgba(50, 110, 170, 0.22), transparent 55%),
-    radial-gradient(ellipse 70% 45% at 90% 90%, rgba(80, 50, 140, 0.12), transparent 50%),
-    linear-gradient(rgba(100, 160, 220, 0.05) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(100, 160, 220, 0.05) 1px, transparent 1px);
-  background-size: auto, auto, 56px 56px, 56px 56px;
+    radial-gradient(ellipse 90% 55% at 50% -8%, rgba(40, 100, 170, 0.28), transparent 58%),
+    radial-gradient(ellipse 50% 40% at 12% 88%, rgba(30, 90, 140, 0.14), transparent 55%),
+    radial-gradient(ellipse 45% 35% at 92% 80%, rgba(90, 50, 150, 0.12), transparent 50%),
+    linear-gradient(rgba(90, 150, 210, 0.045) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(90, 150, 210, 0.045) 1px, transparent 1px);
+  background-size: auto, auto, auto, 48px 48px, 48px 48px;
   background-attachment: fixed;
 }
 
-/* Scene plate — real SVG atmosphere */
+/* Scene plate */
 .mecha-void::before {
   content: '';
   pointer-events: none;
   position: fixed;
   inset: 0;
   z-index: 0;
-  opacity: 0.38;
+  opacity: 0.4;
   background-image: url('/mecha/bg/atmosphere.svg');
   background-size: cover;
   background-position: center bottom;
@@ -122,20 +123,29 @@
   margin-bottom: var(--space-4);
   min-height: 36px;
 }
-.bay-header__code {
-  font-family: var(--font-display);
-  font-size: 10px;
-  letter-spacing: 0.16em;
+.bay-header__icon {
+  width: 34px;
+  height: 34px;
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
   color: var(--energy);
-  opacity: 0.85;
-  flex-shrink: 0;
+  background: rgba(61, 231, 255, 0.1);
+  border: 1px solid rgba(61, 231, 255, 0.28);
+  border-radius: 10px;
+  box-shadow: 0 0 12px rgba(61, 231, 255, 0.12);
 }
-.bay-header__stripe {
-  width: 3px;
-  height: 20px;
-  flex-shrink: 0;
-  background: var(--energy);
-  box-shadow: 0 0 10px var(--energy-glow);
+.bay-header__icon--magenta {
+  color: var(--magenta);
+  background: rgba(179, 136, 255, 0.12);
+  border-color: rgba(179, 136, 255, 0.35);
+  box-shadow: 0 0 12px rgba(179, 136, 255, 0.15);
+}
+.bay-header__icon--amber {
+  color: var(--amber);
+  background: rgba(255, 176, 32, 0.12);
+  border-color: rgba(255, 176, 32, 0.35);
+  box-shadow: 0 0 12px rgba(255, 176, 32, 0.12);
 }
 .bay-header__title {
   margin: 0;
@@ -152,6 +162,10 @@
   border: 1px solid var(--stroke-dim);
   padding: 3px 8px;
   clip-path: polygon(4px 0, 100% 0, 100% calc(100% - 4px), calc(100% - 4px) 100%, 0 100%, 0 4px);
+  flex-shrink: 0;
+}
+.bay-header .expand-btn {
+  flex-shrink: 0;
 }
 
 /* —— Buttons —— */

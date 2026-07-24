@@ -17,6 +17,11 @@ export default defineConfig({
         target: 'http://127.0.0.1:8080',
         changeOrigin: true,
       },
+      // 本地图标等静态上传（否则 /media/* 会落到 SPA index.html，卡片图标全空）
+      '/media': {
+        target: 'http://127.0.0.1:8080',
+        changeOrigin: true,
+      },
       '/healthz': {
         target: 'http://127.0.0.1:8080',
         changeOrigin: true,

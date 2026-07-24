@@ -28,6 +28,8 @@ ENV BOOKNAV_HTTP_ADDR=:8080 \
     BOOKNAV_ENV=production
 # static files are embedded path via STATIC_DIR — copy webdist beside binary
 COPY --from=server-build /src/server/webdist /webdist
+# SQL migrations (resolved as ./migrations or beside binary)
+COPY --from=server-build /src/server/migrations /migrations
 USER nonroot:nonroot
 EXPOSE 8080
 VOLUME ["/data"]

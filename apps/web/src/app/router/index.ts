@@ -58,10 +58,9 @@ export const router = createRouter({
           meta: { requiresSuper: true },
         },
         {
+          // 死链检测并入「数据管理」Tab
           path: 'deadlinks',
-          name: 'admin-deadlinks',
-          component: () => import('@/modules/admin/pages/DeadlinksPage.vue'),
-          meta: { requiresSuper: true },
+          redirect: { path: '/admin/data', query: { tab: 'deadlinks' } },
         },
         {
           path: 'icons',
