@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32" fill="none">
+  <!-- Closed armored claw · hotspot (16,15) -->
+  <path
+    d="M9.4 13.8 L9.4 22.6 Q9.4 27.2 14 27.2 L19.6 27.2 Q24.2 27.2 24.2 22.6 L24.2 14.6
+       L21.6 13 L20.6 11.4 L18.6 12.4 L17.2 10.4 L15.4 12 L14 10.2 L12.4 12.2 L10.8 11.4 Z"
+    fill="#061018"
+    stroke="#5ef0ff"
+    stroke-width="1.35"
+    stroke-linejoin="round"
+  />
+  <path
+    d="M11.4 15 L11.4 22.2 Q11.4 24.8 14 24.8 L19.2 24.8 Q21.6 24.8 21.6 22.2 L21.6 15.4 L19.4 14.2 L18.2 15.4 L16.4 13.6 L14.8 15.2 L13.2 13.8 L12 14.6 Z"
+    fill="#5ef0ff"
+    fill-opacity="0.2"
+  />
+  <path d="M13 17.2 H20" stroke="#a8f8ff" stroke-width="0.85" opacity="0.55"/>
+</svg>

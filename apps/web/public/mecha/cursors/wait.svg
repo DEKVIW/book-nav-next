@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32" fill="none">
+  <!-- HUD progress ring · hotspot (16,16) -->
+  <circle cx="16" cy="16" r="10.5" fill="#061018" stroke="#5ef0ff" stroke-width="1.5"/>
+  <circle
+    cx="16" cy="16" r="7.2"
+    fill="none"
+    stroke="#5ef0ff"
+    stroke-width="2.2"
+    stroke-linecap="round"
+    stroke-dasharray="28 18"
+    transform="rotate(-90 16 16)"
+  />
+  <circle cx="16" cy="16" r="2" fill="#5ef0ff"/>
+  <path d="M16 6.5 V9.2" stroke="#a8f8ff" stroke-width="1.2" stroke-linecap="round"/>
+</svg>

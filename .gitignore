@@ -23,6 +23,11 @@ data/*
 
 # Docs (local design notes only — not versioned)
 docs/
+**/docs/
+
+# Deploy transfer archives (local/remote sync only)
+deploy/*.tgz
+deploy/_remote-*.sh
 
 # Local detached process state (start.ps1 / watchdog)
 .dev/

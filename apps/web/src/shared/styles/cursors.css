@@ -1,15 +1,21 @@
 /**
- * Mecha custom cursors (SVG hotspots)
- * Fallback chain → system cursors
+ * Mecha HUD cursors
+ * default  = cut-corner energy arrow
+ * pointer  = armored finger + lock ring
+ * wait     = progress ring (warp / loading)
+ * Fallback → system cursors
  */
 
 :root {
+  /* tip hotspot */
   --cursor-default: url('/mecha/cursors/default.svg') 4 2, default;
-  --cursor-pointer: url('/mecha/cursors/pointer.svg') 6 2, pointer;
-  --cursor-text: url('/mecha/cursors/text.svg') 11 16, text;
-  --cursor-grab: url('/mecha/cursors/grab.svg') 12 12, grab;
-  --cursor-grabbing: url('/mecha/cursors/grab.svg') 12 12, grabbing;
+  /* fingertip / lock core */
+  --cursor-pointer: url('/mecha/cursors/pointer.svg') 12 3, pointer;
+  --cursor-text: url('/mecha/cursors/text.svg') 16 16, text;
+  --cursor-grab: url('/mecha/cursors/grab.svg') 16 14, grab;
+  --cursor-grabbing: url('/mecha/cursors/grabbing.svg') 16 15, grabbing;
   --cursor-not-allowed: url('/mecha/cursors/not-allowed.svg') 16 16, not-allowed;
+  --cursor-wait: url('/mecha/cursors/wait.svg') 16 16, wait;
 }
 
 html,
@@ -18,21 +24,27 @@ body,
   cursor: var(--cursor-default);
 }
 
-/* Clickable */
+/* Clickable — lock-finger */
 button:not(:disabled),
 [type='button']:not(:disabled),
 [type='submit']:not(:disabled),
 [type='reset']:not(:disabled),
 [role='button']:not([aria-disabled='true']),
+[role='menuitem'],
+[role='tab'],
+[role='option'],
 a[href],
 summary,
 label[for],
+label:has(input[type='checkbox']),
+label:has(input[type='radio']),
 .m-btn:not(:disabled),
 .m-tab,
 .side-item__main,
 .side-item__toggle,
 .side-sub__item,
 .side-rail__collapse,
+.side-brand,
 .admin-nav-link,
 .admin-sidebar__collapse,
 .admin-top-link,
@@ -48,15 +60,23 @@ label[for],
 .ann-close,
 .side-rail__close,
 .console-icon-btn,
-.admin-icon-btn {
-  cursor: var(--cursor-pointer);
+.admin-icon-btn,
+.launch__btn:not(:disabled),
+.goto-btn,
+.skip,
+.ctx-item,
+.provider-row button,
+.icon-pick-item,
+.chk,
+.field-check {
+  cursor: var(--cursor-pointer) !important;
 }
 
 /* Text */
 input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='color']):not([type='file']):not([type='button']):not([type='submit']):not([type='reset']),
 textarea,
 [contenteditable='true'] {
-  cursor: var(--cursor-text);
+  cursor: var(--cursor-text) !important;
 }
 
 input[type='checkbox'],
@@ -64,7 +84,7 @@ input[type='radio'],
 .m-tab input,
 .ai-toggle input,
 select {
-  cursor: var(--cursor-pointer);
+  cursor: var(--cursor-pointer) !important;
 }
 
 /* Disabled */
@@ -78,19 +98,26 @@ textarea:disabled,
   cursor: var(--cursor-not-allowed) !important;
 }
 
+/* Loading / warp countdown */
+.launch__btn:disabled,
+[aria-busy='true'],
+.cursor-wait {
+  cursor: var(--cursor-wait) !important;
+}
+
 /* Drag cards */
 .site-card--drag,
 .site-card[draggable='true'] {
-  cursor: var(--cursor-grab);
+  cursor: var(--cursor-grab) !important;
 }
 .site-card--drag:active,
 .site-card[draggable='true']:active {
-  cursor: var(--cursor-grabbing);
+  cursor: var(--cursor-grabbing) !important;
 }
 
 .admin-table tbody tr[data-clickable],
 .c-table tbody tr[data-clickable] {
-  cursor: var(--cursor-pointer);
+  cursor: var(--cursor-pointer) !important;
 }
 
 textarea {

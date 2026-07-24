@@ -1,4 +1,32 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32">
-  <path d="M10 2 L10 18 L14 14 L17 22 L21 20 L18 12 L24 12 Z" fill="#0a1520" stroke="#5ef0ff" stroke-width="1.5"/>
-  <circle cx="22" cy="22" r="3" fill="none" stroke="#5ef0ff" stroke-width="1.2" opacity="0.8"/>
+<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32" fill="none">
+  <!-- Armored finger + lock ring · hotspot fingertip (12,3) -->
+  <!-- lock ring -->
+  <circle cx="12" cy="5" r="4.6" fill="none" stroke="#5ef0ff" stroke-width="1.45"/>
+  <circle cx="12" cy="5" r="4.6" fill="none" stroke="#a8f8ff" stroke-width="0.7" stroke-dasharray="3.2 2.4" opacity="0.55"/>
+  <circle cx="12" cy="5" r="1.35" fill="#5ef0ff"/>
+  <!-- armored index -->
+  <path
+    d="M9.9 8.2 L9.9 5.4 Q9.9 3 12 3 Q14.1 3 14.1 5.4 L14.1 14.5 L9.9 14.5 Z"
+    fill="#061018"
+    stroke="#5ef0ff"
+    stroke-width="1.35"
+    stroke-linejoin="round"
+  />
+  <path d="M11 6.4 L11 13.2 L13 13.2 L13 6.4 Z" fill="#5ef0ff" fill-opacity="0.22"/>
+  <!-- palm block -->
+  <path
+    d="M9.9 14.2 L9.9 25.8 Q9.9 28.2 12.6 28.2 L20.4 28.2 Q23.1 28.2 23.1 25.5 L23.1 15.2 L20.8 13.8 L20.8 22 L18.2 22 L18.2 13.4 L15.6 12.8 L15.6 22 L14.1 22 L14.1 14.2 Z"
+    fill="#061018"
+    stroke="#5ef0ff"
+    stroke-width="1.35"
+    stroke-linejoin="round"
+  />
+  <path
+    d="M11.8 15.6 L11.8 25.2 Q11.8 26.4 13 26.4 L19.6 26.4 Q20.8 26.4 20.8 25.2 L20.8 16.4 L18.8 15.6 L18.8 20.6 L16.4 20.6 L16.4 14.6 L14.2 14.2 L14.2 20.6 L12.6 20.6 Z"
+    fill="#5ef0ff"
+    fill-opacity="0.16"
+  />
+  <circle cx="14.4" cy="16.4" r="0.55" fill="#a8f8ff"/>
+  <circle cx="17" cy="16.7" r="0.55" fill="#a8f8ff" opacity="0.85"/>
+  <circle cx="19.6" cy="17" r="0.55" fill="#a8f8ff" opacity="0.7"/>
 </svg>

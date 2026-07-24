@@ -2,29 +2,29 @@
  * Mecha HUD — atmosphere + structure
  */
 
-/* —— Hangar void: layered depth, readable content —— */
+/* —— Hangar void + optional SpaceSky (ambient canvas under content) —— */
 .mecha-void {
   position: relative;
   min-height: 100vh;
   background-color: #04080f;
   background-image:
-    radial-gradient(ellipse 90% 55% at 50% -8%, rgba(40, 100, 170, 0.28), transparent 58%),
-    radial-gradient(ellipse 50% 40% at 12% 88%, rgba(30, 90, 140, 0.14), transparent 55%),
-    radial-gradient(ellipse 45% 35% at 92% 80%, rgba(90, 50, 150, 0.12), transparent 50%),
-    linear-gradient(rgba(90, 150, 210, 0.045) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(90, 150, 210, 0.045) 1px, transparent 1px);
+    radial-gradient(ellipse 90% 55% at 50% -8%, rgba(40, 100, 170, 0.2), transparent 58%),
+    radial-gradient(ellipse 50% 40% at 12% 88%, rgba(30, 90, 140, 0.1), transparent 55%),
+    radial-gradient(ellipse 45% 35% at 92% 80%, rgba(90, 50, 150, 0.08), transparent 50%),
+    linear-gradient(rgba(90, 150, 210, 0.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(90, 150, 210, 0.035) 1px, transparent 1px);
   background-size: auto, auto, auto, 48px 48px, 48px 48px;
   background-attachment: fixed;
 }
 
-/* Scene plate */
+/* Scene plate — hangar silhouette, kept subtle under starfield */
 .mecha-void::before {
   content: '';
   pointer-events: none;
   position: fixed;
   inset: 0;
   z-index: 0;
-  opacity: 0.4;
+  opacity: 0.22;
   background-image: url('/mecha/bg/atmosphere.svg');
   background-size: cover;
   background-position: center bottom;
@@ -32,7 +32,7 @@
   background-attachment: fixed;
 }
 
-/* Soft vignette so content stays readable */
+/* Soft vignette — readability for cards/text over sky */
 .mecha-void::after {
   content: '';
   pointer-events: none;
@@ -40,16 +40,27 @@
   inset: 0;
   z-index: 0;
   background:
-    radial-gradient(ellipse 75% 70% at 50% 40%, transparent 20%, rgba(4, 8, 14, 0.55) 100%),
-    linear-gradient(180deg, rgba(5, 10, 18, 0.25) 0%, transparent 30%, rgba(5, 10, 18, 0.45) 100%);
+    radial-gradient(ellipse 78% 72% at 50% 40%, transparent 18%, rgba(4, 8, 14, 0.5) 100%),
+    linear-gradient(180deg, rgba(5, 10, 18, 0.2) 0%, transparent 28%, rgba(5, 10, 18, 0.4) 100%);
 }
 
+/* Content above fixed SpaceSky (z-index 0) */
 .mecha-void > * {
   position: relative;
   z-index: 1;
 }
 
-/* Admin: lighter atmosphere so tables stay crisp */
+/* When ambient sky is on, further soften hangar plate so stars read clearly */
+.app-root--sky.mecha-void::before {
+  opacity: 0.12;
+}
+.app-root--sky.mecha-void::after {
+  background:
+    radial-gradient(ellipse 80% 75% at 50% 38%, transparent 22%, rgba(4, 8, 14, 0.42) 100%),
+    linear-gradient(180deg, rgba(5, 10, 18, 0.15) 0%, transparent 30%, rgba(5, 10, 18, 0.35) 100%);
+}
+
+/* Admin: no starfield; slightly stronger plate for table contrast */
 .admin-shell.mecha-void::before {
   opacity: 0.14;
 }

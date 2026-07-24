@@ -1,4 +1,6 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32">
-  <circle cx="16" cy="16" r="10" fill="none" stroke="#ff4d6a" stroke-width="2"/>
-  <path d="M9 9 L23 23" stroke="#ff4d6a" stroke-width="2"/>
+<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32" fill="none">
+  <!-- Ban ring · hotspot (16,16) -->
+  <circle cx="16" cy="16" r="11.2" fill="#061018" stroke="#ff4d6a" stroke-width="1.9"/>
+  <circle cx="16" cy="16" r="7.6" fill="none" stroke="#ff4d6a" stroke-opacity="0.35" stroke-width="1"/>
+  <path d="M9 9 L23 23" stroke="#ff4d6a" stroke-width="2.3" stroke-linecap="round"/>
 </svg>

@@ -10,6 +10,7 @@ import { ref, onMounted, onUnmounted, computed } from 'vue'
 import { useRoute, RouterLink } from 'vue-router'
 import { apiPost } from '@/shared/api/client'
 import type { Website } from '@/shared/types/models'
+import SpaceSky from '@/shared/ui/SpaceSky.vue'
 
 const SKIP_KEY = 'booknav_skip_transition'
 
@@ -29,14 +30,10 @@ const progress = ref(0)
 const jumping = ref(false)
 const iconBroken = ref(false)
 
-const canvasRef = ref<HTMLCanvasElement | null>(null)
-
 let rafId = 0
-let skyRaf = 0
 let startMs = 0
 let ended = false
 let targetUrl = ''
-let skyStop: (() => void) | null = null
 
 const skipRemembered = computed(() => {
   try {
@@ -95,174 +92,6 @@ function tick() {
   rafId = requestAnimationFrame(tick)
 }
 
-/** Canvas 密集星空：三层视差 + 闪烁 + 流星，高分屏也清晰可见 */
-function startSky() {
-  const canvas = canvasRef.value
-  if (!canvas) return
-  const reduce =
-    typeof window !== 'undefined' &&
-    window.matchMedia('(prefers-reduced-motion: reduce)').matches
-
-  const ctx = canvas.getContext('2d', { alpha: false })
-  if (!ctx) return
-
-  type Star = { x: number; y: number; z: number; r: number; base: number; phase: number }
-  type Meteor = { x: number; y: number; vx: number; vy: number; life: number; max: number }
-
-  let w = 0
-  let h = 0
-  let dpr = 1
-  let stars: Star[] = []
-  let meteors: Meteor[] = []
-  let t0 = performance.now()
-  let running = true
-
-  function resize() {
-    dpr = Math.min(window.devicePixelRatio || 1, 2)
-    w = window.innerWidth
-    h = window.innerHeight
-    canvas!.width = Math.floor(w * dpr)
-    canvas!.height = Math.floor(h * dpr)
-    canvas!.style.width = w + 'px'
-    canvas!.style.height = h + 'px'
-    ctx!.setTransform(dpr, 0, 0, dpr, 0, 0)
-    seedStars()
-  }
-
-  function seedStars() {
-    const area = w * h
-    // 更高密度：约每 1400px² 一颗 + 一批亮星
-    const n = Math.min(1400, Math.max(450, Math.floor(area / 1400)))
-    stars = []
-    for (let i = 0; i < n; i++) {
-      const z = Math.random() // 0 远 1 近
-      const bright = Math.random() < 0.12
-      stars.push({
-        x: Math.random() * w,
-        y: Math.random() * h,
-        z: bright ? 0.85 + Math.random() * 0.15 : z,
-        r: bright ? 1.8 + Math.random() * 1.6 : 0.8 + z * 2.2 + Math.random(),
-        base: bright ? 0.85 + Math.random() * 0.15 : 0.45 + z * 0.5,
-        phase: Math.random() * Math.PI * 2,
-      })
-    }
-  }
-
-  function spawnMeteor() {
-    if (meteors.length > 2) return
-    const fromTop = Math.random() > 0.35
-    meteors.push({
-      x: Math.random() * w * 0.7,
-      y: fromTop ? Math.random() * h * 0.35 : Math.random() * h * 0.5,
-      vx: 6 + Math.random() * 8,
-      vy: 3 + Math.random() * 4,
-      life: 0,
-      max: 35 + Math.random() * 25,
-    })
-  }
-
-  function drawFrame(now: number) {
-    if (!running) return
-    const t = (now - t0) / 1000
-
-    // 深空底：略提亮，避免「纯黑糊成一片」
-    const g = ctx!.createLinearGradient(0, 0, w * 0.3, h)
-    g.addColorStop(0, '#0a1830')
-    g.addColorStop(0.4, '#0c1a38')
-    g.addColorStop(0.75, '#081428')
-    g.addColorStop(1, '#060e20')
-    ctx!.fillStyle = g
-    ctx!.fillRect(0, 0, w, h)
-
-    // 星云光晕（明显可见）
-    drawNebula(w * 0.2, h * 0.25, Math.min(w, h) * 0.62, 'rgba(50,130,255,0.38)', t * 0.02)
-    drawNebula(w * 0.82, h * 0.58, Math.min(w, h) * 0.55, 'rgba(140,70,220,0.32)', -t * 0.015)
-    drawNebula(w * 0.55, h * 0.12, Math.min(w, h) * 0.42, 'rgba(40,200,240,0.22)', t * 0.01)
-    drawNebula(w * 0.45, h * 0.78, Math.min(w, h) * 0.4, 'rgba(30,90,200,0.2)', t * 0.012)
-
-    // 星点
-    for (const s of stars) {
-      if (!reduce) {
-        // 视差漂移
-        s.x += (0.15 + s.z * 0.55) * 0.35
-        s.y += (0.05 + s.z * 0.2) * 0.35
-        if (s.x > w + 4) s.x = -4
-        if (s.y > h + 4) s.y = -4
-      }
-      const tw = reduce ? 1 : 0.55 + 0.45 * Math.sin(t * (1.2 + s.z) + s.phase)
-      const a = Math.min(1, s.base * tw)
-      const r = s.r * (0.85 + 0.25 * tw)
-
-      // 光晕
-      if (s.z > 0.55) {
-        const grd = ctx!.createRadialGradient(s.x, s.y, 0, s.x, s.y, r * 4)
-        grd.addColorStop(0, `rgba(180,240,255,${0.22 * a})`)
-        grd.addColorStop(1, 'rgba(180,240,255,0)')
-        ctx!.fillStyle = grd
-        ctx!.beginPath()
-        ctx!.arc(s.x, s.y, r * 4, 0, Math.PI * 2)
-        ctx!.fill()
-      }
-
-      ctx!.fillStyle = s.z > 0.7 ? `rgba(220,250,255,${a})` : `rgba(200,230,255,${a})`
-      ctx!.beginPath()
-      ctx!.arc(s.x, s.y, r, 0, Math.PI * 2)
-      ctx!.fill()
-    }
-
-    // 流星
-    if (!reduce && Math.random() < 0.008) spawnMeteor()
-    meteors = meteors.filter((m) => m.life < m.max)
-    for (const m of meteors) {
-      m.life++
-      m.x += m.vx
-      m.y += m.vy
-      const fade = 1 - m.life / m.max
-      const len = 40 + m.vx * 4
-      const ang = Math.atan2(m.vy, m.vx)
-      ctx!.strokeStyle = `rgba(200,240,255,${0.85 * fade})`
-      ctx!.lineWidth = 1.5
-      ctx!.beginPath()
-      ctx!.moveTo(m.x, m.y)
-      ctx!.lineTo(m.x - Math.cos(ang) * len, m.y - Math.sin(ang) * len)
-      ctx!.stroke()
-      ctx!.fillStyle = `rgba(255,255,255,${fade})`
-      ctx!.beginPath()
-      ctx!.arc(m.x, m.y, 1.6, 0, Math.PI * 2)
-      ctx!.fill()
-    }
-
-    // 很轻的边缘暗角，保留星空可见度
-    const vg = ctx!.createRadialGradient(w / 2, h * 0.45, w * 0.2, w / 2, h * 0.45, w * 0.85)
-    vg.addColorStop(0, 'rgba(2,6,14,0)')
-    vg.addColorStop(1, 'rgba(2,6,14,0.28)')
-    ctx!.fillStyle = vg
-    ctx!.fillRect(0, 0, w, h)
-
-    skyRaf = requestAnimationFrame(drawFrame)
-  }
-
-  function drawNebula(cx: number, cy: number, radius: number, color: string, drift: number) {
-    const x = cx + Math.sin(drift) * 30
-    const y = cy + Math.cos(drift * 0.8) * 20
-    const grd = ctx!.createRadialGradient(x, y, 0, x, y, radius)
-    grd.addColorStop(0, color)
-    grd.addColorStop(1, 'rgba(0,0,0,0)')
-    ctx!.fillStyle = grd
-    ctx!.fillRect(x - radius, y - radius, radius * 2, radius * 2)
-  }
-
-  resize()
-  window.addEventListener('resize', resize)
-  skyRaf = requestAnimationFrame(drawFrame)
-
-  skyStop = () => {
-    running = false
-    cancelAnimationFrame(skyRaf)
-    window.removeEventListener('resize', resize)
-  }
-}
-
 async function load() {
   const id = route.params.id
   try {
@@ -311,19 +140,15 @@ async function load() {
   }
 }
 
-onMounted(() => {
-  startSky()
-  load()
-})
+onMounted(load)
 onUnmounted(() => {
   if (rafId) cancelAnimationFrame(rafId)
-  skyStop?.()
 })
 </script>
 
 <template>
   <div class="warp" :style="{ '--warp-accent': themeColor }" :class="{ 'warp--launch': jumping }">
-    <canvas ref="canvasRef" class="sky-canvas" aria-hidden="true" />
+    <SpaceSky intensity="full" />
 
     <main class="stage">
       <div class="bay">
@@ -434,16 +259,6 @@ onUnmounted(() => {
   background: #040b18;
   color: #e8f1ff;
   font-family: 'Noto Sans SC', 'Segoe UI', system-ui, sans-serif;
-}
-
-.sky-canvas {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  z-index: 0;
-  display: block;
-  pointer-events: none;
 }
 
 .stage {
