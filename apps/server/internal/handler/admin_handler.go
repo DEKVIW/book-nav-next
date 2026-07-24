@@ -1,10 +1,15 @@
 package handler
 
 import (
+	"encoding/json"
+	"fmt"
+	"io"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/booknav/book-nav/apps/server/internal/domain"
 	"github.com/booknav/book-nav/apps/server/internal/middleware"
@@ -262,13 +267,51 @@ func (h *AdminHandler) ListLogs(w http.ResponseWriter, r *http.Request) {
 	response.OK(w, map[string]any{"items": items, "total": total, "page": page, "page_size": pageSize})
 }
 
+// Export downloads a SQLite snapshot (.db3), aligned with legacy BookNav.
 func (h *AdminHandler) Export(w http.ResponseWriter, r *http.Request) {
+	path, err := h.admin.ExportSQLiteTemp()
+	if err != nil {
+		writeErr(w, err)
+		return
+	}
+	defer os.Remove(path)
+	name := fmt.Sprintf("booknav_export_%s.db3", time.Now().UTC().Format("200601021504"))
+	w.Header().Set("Content-Type", "application/octet-stream")
+	w.Header().Set("Content-Disposition", `attachment; filename="`+name+`"`)
+	http.ServeFile(w, r, path)
+}
+
+// ExportJSON keeps the native JSON dump for tooling.
+func (h *AdminHandler) ExportJSON(w http.ResponseWriter, r *http.Request) {
 	data, err := h.admin.ExportNative(r.Context())
 	if err != nil {
 		writeErr(w, err)
 		return
 	}
 	response.OK(w, data)
+}
+
+func (h *AdminHandler) ExportConfig(w http.ResponseWriter, r *http.Request) {
+	data, err := h.admin.ExportConfigPack(r.Context())
+	if err != nil {
+		writeErr(w, err)
+		return
+	}
+	response.OK(w, data)
+}
+
+func (h *AdminHandler) ImportConfig(w http.ResponseWriter, r *http.Request) {
+	var body map[string]any
+	if err := decodeJSON(r, &body); err != nil {
+		response.BadRequest(w, "invalid json")
+		return
+	}
+	stats, err := h.admin.ImportConfigPack(r.Context(), body)
+	if err != nil {
+		writeErr(w, err)
+		return
+	}
+	response.OKMessage(w, stats, "配置已导入")
 }
 
 func (h *AdminHandler) Import(w http.ResponseWriter, r *http.Request) {
@@ -285,7 +328,7 @@ func (h *AdminHandler) Import(w http.ResponseWriter, r *http.Request) {
 	response.OK(w, stats)
 }
 
-// ImportLegacyDB3 imports old Flask export placed under data dir.
+// ImportLegacyDB3 imports old Flask / native SQLite export from server data dir
 // body: { "filename": "booknav_export_xxx.db3", "mode": "merge"|"replace" }
 func (h *AdminHandler) ImportLegacyDB3(w http.ResponseWriter, r *http.Request) {
 	var body struct {
@@ -309,13 +352,83 @@ func (h *AdminHandler) ImportLegacyDB3(w http.ResponseWriter, r *http.Request) {
 	response.OKMessage(w, stats, "导入完成")
 }
 
+// ImportDBUpload accepts a local SQLite file upload (multipart field "file").
+func (h *AdminHandler) ImportDBUpload(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseMultipartForm(64 << 20); err != nil {
+		response.BadRequest(w, "invalid multipart form")
+		return
+	}
+	file, hdr, err := r.FormFile("file")
+	if err != nil {
+		response.BadRequest(w, "请选择数据库文件")
+		return
+	}
+	defer file.Close()
+	mode := r.FormValue("mode")
+	if mode != "replace" {
+		mode = "merge"
+	}
+	ext := strings.ToLower(filepath.Ext(hdr.Filename))
+	switch ext {
+	case ".db", ".db3", ".sqlite", ".sqlite3", "":
+	default:
+		response.BadRequest(w, "仅支持 .db / .db3 / .sqlite")
+		return
+	}
+	tmp, err := os.CreateTemp("", "booknav-import-*"+ext)
+	if err != nil {
+		writeErr(w, err)
+		return
+	}
+	tmpPath := tmp.Name()
+	defer os.Remove(tmpPath)
+	if _, err := io.Copy(tmp, file); err != nil {
+		tmp.Close()
+		writeErr(w, err)
+		return
+	}
+	tmp.Close()
+
+	stats, err := h.admin.ImportLegacyDB3(r.Context(), tmpPath, mode, middleware.UserFrom(r.Context()))
+	if err != nil {
+		writeErr(w, err)
+		return
+	}
+	response.OKMessage(w, stats, "导入完成")
+}
+
+// CreateBackup always creates a full data backup (zip: db + uploads).
+// Config backups use CreateConfigBackup → POST /backups/create-config.
 func (h *AdminHandler) CreateBackup(w http.ResponseWriter, r *http.Request) {
+	// Optional body: { "kind": "config" } for clients that still post here
+	kind := strings.TrimSpace(r.URL.Query().Get("kind"))
+	var body struct {
+		Kind string `json:"kind"`
+	}
+	_ = decodeJSON(r, &body)
+	if kind == "" {
+		kind = body.Kind
+	}
+	if strings.EqualFold(strings.TrimSpace(kind), "config") {
+		h.CreateConfigBackup(w, r)
+		return
+	}
 	name, err := h.admin.BackupLocal(r.Context())
 	if err != nil {
 		writeErr(w, err)
 		return
 	}
-	response.OK(w, map[string]any{"name": name})
+	response.OK(w, map[string]any{"name": name, "kind": "data"})
+}
+
+// CreateConfigBackup writes settings-only JSON (*.config.json), not the database.
+func (h *AdminHandler) CreateConfigBackup(w http.ResponseWriter, r *http.Request) {
+	name, err := h.admin.BackupConfigLocal(r.Context())
+	if err != nil {
+		writeErr(w, err)
+		return
+	}
+	response.OK(w, map[string]any{"name": name, "kind": "config"})
 }
 
 func (h *AdminHandler) ListBackups(w http.ResponseWriter, r *http.Request) {
@@ -349,11 +462,45 @@ func (h *AdminHandler) DeleteBackup(w http.ResponseWriter, r *http.Request) {
 
 func (h *AdminHandler) RestoreBackup(w http.ResponseWriter, r *http.Request) {
 	name := chi.URLParam(r, "name")
+	lower := strings.ToLower(name)
+	if strings.HasSuffix(lower, ".json") {
+		if err := h.admin.RestoreConfigBackup(r.Context(), name); err != nil {
+			writeErr(w, err)
+			return
+		}
+		response.OKMessage(w, nil, "配置已恢复")
+		return
+	}
 	if err := h.admin.RestoreBackup(name); err != nil {
 		writeErr(w, err)
 		return
 	}
-	response.OKMessage(w, nil, "已回滚，建议重启服务")
+	response.OKMessage(w, nil, "数据已恢复，建议重启服务")
+}
+
+// ImportConfigUpload accepts a config JSON file upload.
+func (h *AdminHandler) ImportConfigUpload(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseMultipartForm(8 << 20); err != nil {
+		response.BadRequest(w, "invalid multipart form")
+		return
+	}
+	file, _, err := r.FormFile("file")
+	if err != nil {
+		response.BadRequest(w, "请选择配置文件")
+		return
+	}
+	defer file.Close()
+	var payload map[string]any
+	if err := json.NewDecoder(file).Decode(&payload); err != nil {
+		response.BadRequest(w, "无效的 JSON 配置")
+		return
+	}
+	stats, err := h.admin.ImportConfigPack(r.Context(), payload)
+	if err != nil {
+		writeErr(w, err)
+		return
+	}
+	response.OKMessage(w, stats, "配置已导入")
 }
 
 // —— WebDAV cloud backup ——
@@ -416,6 +563,65 @@ func (h *AdminHandler) UploadBackupWebDAV(w http.ResponseWriter, r *http.Request
 		return
 	}
 	response.OKMessage(w, nil, "已上传到云端")
+}
+
+// RunWebDAVBackup creates selected backup kinds and uploads them to WebDAV.
+// Body optional: { "data": true, "config": true } — defaults from WebDAV config flags.
+func (h *AdminHandler) RunWebDAVBackup(w http.ResponseWriter, r *http.Request) {
+	id, _ := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
+	cfg, err := h.settings.GetWebDAVRaw(r.Context(), id)
+	if err != nil {
+		writeErr(w, err)
+		return
+	}
+	doData := cfg.BackupData
+	doConfig := cfg.BackupConfig
+	if r.Body != nil && r.ContentLength != 0 {
+		var body struct {
+			Data   *bool `json:"data"`
+			Config *bool `json:"config"`
+		}
+		if err := decodeJSON(r, &body); err == nil {
+			if body.Data != nil {
+				doData = *body.Data
+			}
+			if body.Config != nil {
+				doConfig = *body.Config
+			}
+		}
+	}
+	if !doData && !doConfig {
+		response.BadRequest(w, "请至少选择一种备份类型（数据 / 配置）")
+		return
+	}
+	var uploaded []string
+	if doData {
+		name, err := h.admin.BackupLocal(r.Context())
+		if err != nil {
+			writeErr(w, err)
+			return
+		}
+		local := h.admin.BackupPath(name)
+		if err := h.settings.UploadBackupToWebDAV(r.Context(), id, local, name); err != nil {
+			writeErr(w, err)
+			return
+		}
+		uploaded = append(uploaded, name)
+	}
+	if doConfig {
+		name, err := h.admin.BackupConfigLocal(r.Context())
+		if err != nil {
+			writeErr(w, err)
+			return
+		}
+		local := h.admin.BackupPath(name)
+		if err := h.settings.UploadBackupToWebDAV(r.Context(), id, local, name); err != nil {
+			writeErr(w, err)
+			return
+		}
+		uploaded = append(uploaded, name)
+	}
+	response.OKMessage(w, map[string]any{"uploaded": uploaded}, "已备份并上传到云端")
 }
 
 func (h *AdminHandler) ListRemoteWebDAV(w http.ResponseWriter, r *http.Request) {

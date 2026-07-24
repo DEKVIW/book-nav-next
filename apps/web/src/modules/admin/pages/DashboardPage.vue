@@ -28,24 +28,22 @@ const labels: Record<string, string> = {
 }
 
 const quick = [
-  { to: '/admin/websites', title: '链接管理', desc: '管理站点链接' },
-  { to: '/admin/categories', title: '分类管理', desc: '分类结构与排序' },
-  { to: '/admin/settings', title: '站点设置', desc: '基本信息 / AI / 向量', super: true },
-  { to: '/admin/icons', title: '图标管理', desc: '来源提供方与批量抓取', super: true },
-  { to: '/admin/data?tab=deadlinks', title: '死链检测', desc: '数据管理 · 死链 Tab', super: true },
-  { to: '/admin/backups', title: '备份管理', desc: '本地与云端备份', super: true },
-  { to: '/admin/data', title: '数据管理', desc: '导入导出 · 清空 · 死链', super: true },
-  { to: '/admin/jobs', title: '任务中心', desc: '进度 · 停止 · 清理' },
+  { to: '/admin/websites', title: '链接管理' },
+  { to: '/admin/categories', title: '分类管理' },
+  { to: '/admin/settings', title: '站点设置', super: true },
+  { to: '/admin/icons', title: '图标管理', super: true },
+  { to: '/admin/data?tab=deadlinks', title: '死链检测', super: true },
+  { to: '/admin/backups', title: '备份管理', super: true },
+  { to: '/admin/data', title: '数据管理', super: true },
+  { to: '/admin/jobs', title: '任务中心' },
+  { to: '/admin/about', title: '关于' },
 ]
 </script>
 
 <template>
   <div class="admin-page">
     <header class="page-header">
-      <div>
-        <h1>仪表盘</h1>
-        <p>数据概览与常用入口</p>
-      </div>
+      <h1>仪表盘</h1>
     </header>
 
     <div v-if="loading" class="c-empty">加载中…</div>
@@ -57,7 +55,6 @@ const quick = [
         </div>
       </div>
 
-      <h3 class="c-section-title">快捷入口</h3>
       <div class="c-quick">
         <RouterLink
           v-for="q in quick.filter((i) => !i.super || auth.isSuper)"
@@ -65,7 +62,6 @@ const quick = [
           :to="q.to"
         >
           <strong>{{ q.title }}</strong>
-          <span>{{ q.desc }}</span>
         </RouterLink>
       </div>
     </template>

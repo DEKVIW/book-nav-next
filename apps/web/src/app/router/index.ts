@@ -85,6 +85,11 @@ export const router = createRouter({
           name: 'admin-jobs',
           component: () => import('@/modules/admin/pages/JobsPage.vue'),
         },
+        {
+          path: 'about',
+          name: 'admin-about',
+          component: () => import('@/modules/admin/pages/AboutPage.vue'),
+        },
       ],
     },
     {

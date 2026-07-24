@@ -116,10 +116,7 @@ onMounted(async () => {
 <template>
   <div class="admin-page">
     <header class="page-header">
-      <div>
-        <h1>死链检测</h1>
-        <p>批量检测链接是否可访问 · 进度可在任务中心查看</p>
-      </div>
+      <h1>死链检测</h1>
       <div class="page-header__actions">
         <RouterLink class="c-btn c-btn--ghost c-btn--sm" to="/admin/jobs">任务中心</RouterLink>
         <button

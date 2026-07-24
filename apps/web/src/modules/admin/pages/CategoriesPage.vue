@@ -106,10 +106,7 @@ onMounted(load)
 <template>
   <div>
     <header class="page-header">
-      <div>
-        <h1>分类管理</h1>
-        <p>树形分类 · Lucide 图标 · 首页展示上限</p>
-      </div>
+      <h1>分类管理</h1>
     </header>
 
     <div class="c-card c-card__body form-card">

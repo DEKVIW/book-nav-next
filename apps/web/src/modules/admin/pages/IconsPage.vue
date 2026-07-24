@@ -155,10 +155,7 @@ onMounted(async () => {
 <template>
   <div class="admin-page">
     <header class="page-header">
-      <div>
-        <h1>图标管理</h1>
-        <p>显示策略、来源提供方与批量抓取</p>
-      </div>
+      <h1>图标管理</h1>
       <div class="page-header__actions">
         <RouterLink class="c-btn c-btn--ghost c-btn--sm" to="/admin/jobs">任务中心</RouterLink>
         <button type="button" class="c-btn c-btn--ghost" :disabled="saving" @click="saveSettings">
@@ -203,7 +200,6 @@ onMounted(async () => {
 
       <section class="c-card c-card__body">
         <h3 class="c-card__title">来源提供方</h3>
-        <p class="field-hint">按顺序尝试：原站解析 → 已启用的代理服务。仅启用且靠前的会参与抓取。</p>
         <div class="provider-list">
           <div v-for="(p, idx) in providers" :key="p.id" class="provider-row">
             <label class="row-check provider-enable">
@@ -235,8 +231,7 @@ onMounted(async () => {
       </section>
 
       <section class="c-card c-card__body">
-        <h3 class="c-card__title">图床（可选）</h3>
-        <p class="field-hint">开启「上传图床」后生效；Token 已配置时留空表示不修改。</p>
+        <h3 class="c-card__title">图床</h3>
         <div class="c-form c-form--2col">
           <label>
             提供方
@@ -261,14 +256,11 @@ onMounted(async () => {
 
       <section v-if="lastJob" class="c-card c-card__body">
         <div class="job-card__row">
-          <div>
-            <h3 class="c-card__title" style="margin-bottom: 4px">最近图标任务</h3>
-            <p class="field-hint" style="margin: 0">
-              #{{ lastJob.id }} · {{ lastJob.status }} · {{ lastJob.progress }}/{{ lastJob.total }} · 成功
-              {{ lastJob.success }} / 失败 {{ lastJob.failed }}
-            </p>
+          <div class="mono">
+            #{{ lastJob.id }} · {{ lastJob.status }} · {{ lastJob.progress }}/{{ lastJob.total }} · ok
+            {{ lastJob.success }} / fail {{ lastJob.failed }}
           </div>
-          <RouterLink class="c-btn c-btn--ghost c-btn--sm" to="/admin/jobs">查看全部</RouterLink>
+          <RouterLink class="c-btn c-btn--ghost c-btn--sm" to="/admin/jobs">任务中心</RouterLink>
         </div>
       </section>
     </template>
@@ -276,6 +268,10 @@ onMounted(async () => {
 </template>
 
 <style scoped>
+.mono {
+  font-family: var(--console-mono, ui-monospace, monospace);
+  font-size: 12px;
+}
 .c-form--2col {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -305,12 +301,6 @@ onMounted(async () => {
   cursor: pointer;
   font-size: 13px;
   color: var(--console-text);
-}
-.field-hint {
-  margin: 0 0 12px;
-  font-size: 12px;
-  color: var(--console-text-3);
-  line-height: 1.45;
 }
 .provider-list {
   display: flex;

@@ -27,10 +27,22 @@ type WebDAVConfig struct {
 	Path               string `json:"webdav_path"`
 	Enabled            bool   `json:"enabled"`
 	AutoBackup         bool   `json:"auto_backup"`
-	BackupInterval     int    `json:"backup_interval"` // hours
-	BackupKeepCount    int    `json:"backup_keep_count"`
-	LastBackupTime     string `json:"last_backup_time,omitempty"`
-	LastBackupStatus   string `json:"last_backup_status,omitempty"`
+	// BackupData / BackupConfig: which artifacts to create & upload (both may be true).
+	BackupData      bool   `json:"backup_data"`
+	BackupConfig    bool   `json:"backup_config"`
+	BackupInterval  int    `json:"backup_interval"` // hours
+	BackupKeepCount int    `json:"backup_keep_count"`
+	LastBackupTime  string `json:"last_backup_time,omitempty"`
+	LastBackupStatus string `json:"last_backup_status,omitempty"`
+}
+
+// normalizeWebDAVKinds defaults missing flags for older configs (data-only era → both on).
+func normalizeWebDAVKinds(c *WebDAVConfig) {
+	// If both false, treat as legacy unset → enable data (preserve old behavior) and config.
+	if !c.BackupData && !c.BackupConfig {
+		c.BackupData = true
+		c.BackupConfig = true
+	}
 }
 
 func (s *SettingsService) loadWebDAVConfigs(ctx context.Context) ([]WebDAVConfig, error) {
@@ -45,7 +57,15 @@ func (s *SettingsService) loadWebDAVConfigs(ctx context.Context) ([]WebDAVConfig
 	if err := json.Unmarshal(raw, &list); err != nil {
 		return []WebDAVConfig{}, nil
 	}
+	for i := range list {
+		normalizeWebDAVKinds(&list[i])
+	}
 	return list, nil
+}
+
+// GetWebDAVRaw returns unmasked config (password included) for internal backup jobs.
+func (s *SettingsService) GetWebDAVRaw(ctx context.Context, id int64) (*WebDAVConfig, error) {
+	return s.getWebDAVRaw(ctx, id)
 }
 
 func (s *SettingsService) saveWebDAVConfigs(ctx context.Context, list []WebDAVConfig) error {
@@ -104,6 +124,9 @@ func (s *SettingsService) SaveWebDAV(ctx context.Context, in WebDAVConfig) ([]We
 	if in.BackupKeepCount <= 0 {
 		in.BackupKeepCount = 10
 	}
+	if !in.BackupData && !in.BackupConfig {
+		return nil, apperr.New(apperr.Validation, "请至少勾选「数据备份」或「配置备份」")
+	}
 	pw := strings.TrimSpace(in.Password)
 	keep := pw == "" || pw == secretSentinel || strings.HasPrefix(pw, "****")
 
@@ -121,6 +144,8 @@ func (s *SettingsService) SaveWebDAV(ctx context.Context, in WebDAVConfig) ([]We
 			list[i].Path = in.Path
 			list[i].Enabled = in.Enabled
 			list[i].AutoBackup = in.AutoBackup
+			list[i].BackupData = in.BackupData
+			list[i].BackupConfig = in.BackupConfig
 			list[i].BackupInterval = in.BackupInterval
 			list[i].BackupKeepCount = in.BackupKeepCount
 			if keep {
@@ -348,7 +373,12 @@ func (s *SettingsService) ListRemoteWebDAV(ctx context.Context, id int64) ([]map
 		if base == "" || base == "/" || base == "." {
 			continue
 		}
-		if strings.HasSuffix(strings.ToLower(base), ".db") || strings.Contains(base, "booknav") {
+		lowBase := strings.ToLower(base)
+		if strings.HasSuffix(lowBase, ".db") ||
+			strings.HasSuffix(lowBase, ".db3") ||
+			strings.HasSuffix(lowBase, ".zip") ||
+			strings.HasSuffix(lowBase, ".json") ||
+			strings.Contains(lowBase, "booknav") {
 			names = append(names, base)
 		}
 	}

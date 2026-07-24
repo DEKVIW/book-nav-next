@@ -60,11 +60,8 @@ onMounted(load)
 <template>
   <div>
     <header class="page-header">
-      <div>
-        <h1>邀请码</h1>
-        <p>生成邀请码供用户注册</p>
-      </div>
-      <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center">
+      <h1>邀请码</h1>
+      <div class="page-header__actions">
         <input v-model.number="count" class="c-input" type="number" min="1" max="50" style="width: 80px" />
         <button type="button" class="c-btn c-btn--primary" @click="generate">生成</button>
       </div>

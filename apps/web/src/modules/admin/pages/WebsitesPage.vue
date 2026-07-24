@@ -143,10 +143,7 @@ onMounted(async () => {
 <template>
   <div>
     <header class="page-header">
-      <div>
-        <h1>链接管理</h1>
-        <p>管理全站导航链接。长文本在表格内单行省略，悬停可看完整内容。共 {{ total }} 条。</p>
-      </div>
+      <h1>链接管理</h1>
       <div class="page-header__actions">
         <button type="button" class="c-btn c-btn--primary" @click="openCreate">添加链接</button>
       </div>

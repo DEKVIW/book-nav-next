@@ -7,7 +7,7 @@
  */
 import { onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter, RouterLink } from 'vue-router'
-import { apiGet, apiPost } from '@/shared/api/client'
+import { apiDownload, apiGet, apiPost, apiPostForm } from '@/shared/api/client'
 import { useToast } from '@/shared/composables/useToast'
 import AdminTable from '../components/AdminTable.vue'
 
@@ -57,22 +57,22 @@ function setTab(key: TabKey) {
 }
 watch(() => route.query.tab, applyTab)
 
-const legacyFile = ref('')
-const legacyMode = ref<'merge' | 'replace'>('merge')
+const importMode = ref<'merge' | 'replace'>('merge')
+const importFile = ref<File | null>(null)
+const fileInput = ref<HTMLInputElement | null>(null)
 const importing = ref(false)
 const exporting = ref(false)
+
+function onPickFile(e: Event) {
+  const input = e.target as HTMLInputElement
+  importFile.value = input.files?.[0] || null
+}
 
 async function doExport() {
   exporting.value = true
   try {
-    const data = await apiGet('/api/v1/admin/export')
-    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
-    const a = document.createElement('a')
-    a.href = URL.createObjectURL(blob)
-    a.download = `booknav-export-${Date.now()}.json`
-    a.click()
-    URL.revokeObjectURL(a.href)
-    toast.success('已导出 JSON')
+    await apiDownload('/api/v1/admin/export', `booknav_export_${Date.now()}.db3`)
+    toast.success('已导出数据库')
   } catch (e: unknown) {
     toast.error(e instanceof Error ? e.message : '导出失败')
   } finally {
@@ -80,21 +80,26 @@ async function doExport() {
   }
 }
 
-async function doLegacyImport() {
-  if (!legacyFile.value.trim()) {
-    toast.error('请填写 data 目录下的文件名')
+async function doImport() {
+  if (!importFile.value) {
+    toast.error('请选择数据库文件')
     return
   }
-  if (legacyMode.value === 'replace' && !confirm('替换模式会清空现有分类与链接，确定？')) return
+  if (importMode.value === 'replace' && !confirm('替换模式会清空现有分类与链接，确定？')) return
   importing.value = true
   try {
-    const stats = await apiPost<{ categories: number; websites: number; skipped: number }>(
-      '/api/v1/admin/import/legacy-db3',
-      { filename: legacyFile.value.trim(), mode: legacyMode.value },
+    const fd = new FormData()
+    fd.append('file', importFile.value)
+    fd.append('mode', importMode.value)
+    const stats = await apiPostForm<{ categories: number; websites: number; skipped: number }>(
+      '/api/v1/admin/import/db',
+      fd,
     )
     toast.success(
       `导入完成：分类 ${stats.categories} · 链接 ${stats.websites} · 跳过 ${stats.skipped ?? 0}`,
     )
+    importFile.value = null
+    if (fileInput.value) fileInput.value.value = ''
   } catch (e: unknown) {
     toast.error(e instanceof Error ? e.message : '导入失败')
   } finally {
@@ -200,10 +205,7 @@ onMounted(async () => {
 <template>
   <div class="admin-page">
     <header class="page-header">
-      <div>
-        <h1>数据管理</h1>
-        <p>导入导出 · 清空 · 死链检测</p>
-      </div>
+      <h1>数据管理</h1>
       <div class="page-header__actions">
         <RouterLink class="c-btn c-btn--ghost c-btn--sm" to="/admin/backups">备份管理</RouterLink>
         <RouterLink class="c-btn c-btn--ghost c-btn--sm" to="/admin/jobs">任务中心</RouterLink>
@@ -224,50 +226,46 @@ onMounted(async () => {
     </div>
 
     <section v-show="tab === 'io'" class="c-card c-card__body">
-      <h3 class="c-card__title">旧站导入（Flask .db3 / app.db）</h3>
-      <p class="field-hint">
-        文件放到服务器 <code>data/</code>（容器 <code>/data/</code>）后填写文件名。合并模式更安全。
-      </p>
+      <h3 class="c-card__title">导出</h3>
       <div class="form-row">
-        <input
-          v-model="legacyFile"
-          class="c-input"
-          placeholder="例如 booknav_export.db3"
-          style="max-width: 320px"
-        />
-        <select v-model="legacyMode" class="c-input" style="max-width: 140px">
-          <option value="merge">合并（推荐）</option>
-          <option value="replace">替换</option>
-        </select>
-        <button type="button" class="c-btn c-btn--primary" :disabled="importing" @click="doLegacyImport">
-          {{ importing ? '导入中…' : '开始导入' }}
+        <button type="button" class="c-btn c-btn--primary" :disabled="exporting" @click="doExport">
+          {{ exporting ? '导出中…' : '导出数据库 (.db3)' }}
         </button>
       </div>
 
-      <h3 class="c-card__title" style="margin-top: 22px">导出</h3>
-      <p class="field-hint">导出分类与链接 JSON（不是完整库备份，库备份请用备份管理）。</p>
-      <button type="button" class="c-btn c-btn--ghost" :disabled="exporting" @click="doExport">
-        {{ exporting ? '导出中…' : '导出 JSON' }}
-      </button>
+      <h3 class="c-card__title" style="margin-top: 22px">导入</h3>
+      <div class="form-row">
+        <input
+          ref="fileInput"
+          type="file"
+          class="c-input file-input"
+          accept=".db,.db3,.sqlite,.sqlite3"
+          @change="onPickFile"
+        />
+        <select v-model="importMode" class="c-input" style="max-width: 140px">
+          <option value="merge">合并</option>
+          <option value="replace">替换</option>
+        </select>
+        <button type="button" class="c-btn c-btn--primary" :disabled="importing" @click="doImport">
+          {{ importing ? '导入中…' : '开始导入' }}
+        </button>
+      </div>
+      <p v-if="importFile" class="file-name mono">{{ importFile.name }}</p>
     </section>
 
     <section v-show="tab === 'danger'" class="c-card c-card__body danger-card">
       <h3 class="c-card__title">清空数据</h3>
-      <p class="field-hint">清空后无法通过本页恢复，请先到「备份管理」做快照。</p>
       <div class="form-row">
         <button type="button" class="c-btn c-btn--danger" @click="clearSites">清空全部链接</button>
-        <RouterLink class="c-btn c-btn--ghost c-btn--sm" to="/admin/backups">去备份</RouterLink>
-        <RouterLink class="c-btn c-btn--ghost c-btn--sm" to="/admin/logs">操作日志</RouterLink>
+        <RouterLink class="c-btn c-btn--ghost c-btn--sm" to="/admin/backups">备份</RouterLink>
+        <RouterLink class="c-btn c-btn--ghost c-btn--sm" to="/admin/logs">日志</RouterLink>
       </div>
     </section>
 
     <template v-if="tab === 'deadlinks'">
       <section class="c-card c-card__body">
         <div class="dead-head">
-          <div>
-            <h3 class="c-card__title" style="margin-bottom: 4px">死链检测</h3>
-            <p class="field-hint" style="margin: 0">批量检测可访问性；进度也可在任务中心查看与停止。</p>
-          </div>
+          <h3 class="c-card__title" style="margin-bottom: 0">死链检测</h3>
           <div class="form-row">
             <button
               type="button"
@@ -330,18 +328,17 @@ onMounted(async () => {
   gap: 10px;
   align-items: center;
 }
-.field-hint {
-  margin: 0 0 14px;
+.file-input {
+  max-width: 320px;
+  padding: 6px 8px;
+}
+.file-name {
+  margin: 8px 0 0;
   font-size: 12px;
   color: var(--console-text-3);
-  line-height: 1.5;
 }
-.field-hint code {
-  font-family: var(--font-mono, ui-monospace, monospace);
-  font-size: 11px;
-  padding: 1px 5px;
-  border-radius: 4px;
-  background: rgba(0, 0, 0, 0.25);
+.mono {
+  font-family: var(--console-mono, ui-monospace, monospace);
 }
 .danger-card {
   border-color: rgba(255, 77, 106, 0.25);

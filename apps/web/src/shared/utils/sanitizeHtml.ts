@@ -31,31 +31,34 @@ const ALLOWED_ATTR = new Set([
   'href',
   'target',
   'rel',
-  'class',
-  'style',
   'src',
   'alt',
   'title',
-  'width',
-  'height',
 ])
 
-export function sanitizeHtml(html: string): string {
+export type SanitizeOptions = {
+  /** Strip class/style so host UI can restyle (e.g. mecha announcement). Default true for safety. */
+  stripPresentation?: boolean
+}
+
+export function sanitizeHtml(html: string, opts: SanitizeOptions = {}): string {
   if (!html || typeof html !== 'string') return ''
   // 若看起来不是 HTML，当纯文本处理
   if (!/[<>]/.test(html)) {
     return escapeText(html)
   }
 
+  const stripPresentation = opts.stripPresentation !== false
+
   const doc = new DOMParser().parseFromString(`<div id="root">${html}</div>`, 'text/html')
   const root = doc.getElementById('root')
   if (!root) return escapeText(html)
 
-  walk(root)
+  walk(root, stripPresentation)
   return root.innerHTML
 }
 
-function walk(node: Node) {
+function walk(node: Node, stripPresentation: boolean) {
   const children = Array.from(node.childNodes)
   for (const child of children) {
     if (child.nodeType === Node.ELEMENT_NODE) {
@@ -69,10 +72,18 @@ function walk(node: Node) {
         node.removeChild(el)
         continue
       }
-      // strip bad attrs
+      // strip bad attrs — never keep style/class for announcement restyle
       for (const attr of Array.from(el.attributes)) {
         const name = attr.name.toLowerCase()
-        if (name.startsWith('on') || !ALLOWED_ATTR.has(name)) {
+        if (name.startsWith('on')) {
+          el.removeAttribute(attr.name)
+          continue
+        }
+        if (stripPresentation && (name === 'style' || name === 'class' || name === 'id')) {
+          el.removeAttribute(attr.name)
+          continue
+        }
+        if (!ALLOWED_ATTR.has(name) && !(name === 'class' || name === 'style' || name === 'width' || name === 'height')) {
           el.removeAttribute(attr.name)
           continue
         }
@@ -87,7 +98,7 @@ function walk(node: Node) {
         el.setAttribute('rel', 'noopener noreferrer')
         if (!el.getAttribute('target')) el.setAttribute('target', '_blank')
       }
-      walk(el)
+      walk(el, stripPresentation)
     }
   }
 }

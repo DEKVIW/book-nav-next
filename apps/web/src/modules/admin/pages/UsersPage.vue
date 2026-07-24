@@ -36,10 +36,7 @@ onMounted(load)
 <template>
   <div>
     <header class="page-header">
-      <div>
-        <h1>用户管理</h1>
-        <p>角色：user / admin / superadmin</p>
-      </div>
+      <h1>用户管理</h1>
     </header>
 
     <AdminTable :loading="loading" :is-empty="!users.length" empty="暂无用户">

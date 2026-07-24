@@ -30,6 +30,7 @@ const menuItems = computed<NavItem[]>(() => [
   { to: '/admin/data', label: '数据管理', icon: 'server', super: true },
   { to: '/admin/icons', label: '图标管理', icon: 'image', super: true },
   { to: '/admin/backups', label: '备份管理', icon: 'archive', super: true },
+  { to: '/admin/about', label: '关于', icon: 'info' },
 ])
 
 function visible(item: NavItem) {
@@ -54,6 +55,7 @@ const pageTitle = computed(() => {
     '/admin/backups': '备份管理',
     '/admin/logs': '操作日志',
     '/admin/jobs': '任务中心',
+    '/admin/about': '关于',
   }
   const path = route.path
   const keys = Object.keys(map).sort((a, b) => b.length - a.length)

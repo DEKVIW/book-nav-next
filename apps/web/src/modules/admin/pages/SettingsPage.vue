@@ -426,10 +426,7 @@ onMounted(() => {
 <template>
   <div class="admin-page">
     <header class="page-header">
-      <div>
-        <h1>站点设置</h1>
-        <p>站点信息、过渡页、AI 与向量检索</p>
-      </div>
+      <h1>站点设置</h1>
       <div class="page-header__actions">
         <button type="button" class="c-btn c-btn--primary" :disabled="saving || loading" @click="saveAll">
           {{ saving ? '保存中…' : '保存设置' }}
@@ -461,7 +458,6 @@ onMounted(() => {
               <label>
                 站点名称
                 <input v-model="site.name" class="c-input" />
-                <span class="field-hint">浏览器标题与导航栏显示</span>
               </label>
               <label>
                 副标题
@@ -484,9 +480,8 @@ onMounted(() => {
                 <input v-model="site.favicon" class="c-input" placeholder="https://" />
               </label>
               <label class="span-2">
-                页脚内容
+                页脚（HTML）
                 <textarea v-model="site.footer" class="c-input" rows="4" />
-                <span class="field-hint">支持 HTML</span>
               </label>
             </div>
 
@@ -502,8 +497,12 @@ onMounted(() => {
                 </label>
                 <label class="span-2">
                   内容
-                  <textarea v-model="announcement.content" class="c-input" rows="4" />
-                  <span class="field-hint">支持 HTML</span>
+                  <textarea
+                    v-model="announcement.content"
+                    class="c-input"
+                    rows="6"
+                    placeholder="支持 Markdown 或 HTML。样式由前台机甲主题统一覆盖。"
+                  />
                 </label>
                 <label>
                   开始时间
@@ -535,9 +534,8 @@ onMounted(() => {
                 <input v-model="transition.enable" type="checkbox" /> 启用过渡页
               </label>
               <label>
-                访客停留（秒）
+                访客停留（秒，0=直跳）
                 <input v-model.number="transition.time" class="c-input" type="number" min="0" max="30" />
-                <span class="field-hint">0 表示直接跳转</span>
               </label>
               <label>
                 管理员停留（秒）
@@ -725,7 +723,6 @@ onMounted(() => {
           </div>
         </div>
         <div class="modal__body">
-          <p class="hint">按优先级轮询兜底；密钥只显示掩码，编辑时留空表示不修改。</p>
           <div class="table-wrap">
             <table class="mini-table">
               <thead>
@@ -821,7 +818,6 @@ onMounted(() => {
           </div>
         </div>
         <div class="modal__body">
-          <p class="hint">auto = 按优先级与推荐模型；manual = 指定提供方与模型</p>
           <div v-for="(label, key) in taskLabels" :key="key" class="bind-row">
             <strong>{{ label }}</strong>
             <select v-model="taskBindings[key].mode" class="c-input">
@@ -901,7 +897,6 @@ onMounted(() => {
             最大 Token
             <input v-model.number="aiFlags.max_tokens" class="c-input" type="number" min="100" max="4000" />
           </label>
-          <p class="hint span-2">点页面「保存设置」后与其它项一并生效。</p>
         </div>
       </div>
     </div>

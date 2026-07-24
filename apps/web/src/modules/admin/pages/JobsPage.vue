@@ -112,10 +112,7 @@ onUnmounted(() => {
 <template>
   <div class="admin-page">
     <header class="page-header">
-      <div>
-        <h1>任务中心</h1>
-        <p>监控进度 · 停止运行中任务 · 同类型不可重复启动</p>
-      </div>
+      <h1>任务中心</h1>
       <div class="page-header__actions">
         <button type="button" class="c-btn c-btn--ghost c-btn--sm" @click="clearFinished">清空已结束</button>
         <button type="button" class="c-btn c-btn--ghost c-btn--sm" @click="load">刷新</button>
@@ -123,20 +120,10 @@ onUnmounted(() => {
     </header>
 
     <section class="c-card c-card__body launch-hint">
-      <h3 class="c-card__title">启动入口（避免重复点）</h3>
       <div class="launch-grid">
-        <RouterLink class="launch-item" to="/admin/settings?tab=vector">
-          <strong>向量索引</strong>
-          <span>站点设置 → 向量配置</span>
-        </RouterLink>
-        <RouterLink class="launch-item" to="/admin/icons">
-          <strong>图标抓取</strong>
-          <span>图标管理 → 批量抓取</span>
-        </RouterLink>
-        <RouterLink class="launch-item" to="/admin/data?tab=deadlinks">
-          <strong>死链检测</strong>
-          <span>数据管理 → 死链检测</span>
-        </RouterLink>
+        <RouterLink class="launch-item" to="/admin/settings?tab=vector">向量索引</RouterLink>
+        <RouterLink class="launch-item" to="/admin/icons">图标抓取</RouterLink>
+        <RouterLink class="launch-item" to="/admin/data?tab=deadlinks">死链检测</RouterLink>
       </div>
     </section>
 
@@ -206,26 +193,21 @@ onUnmounted(() => {
 }
 .launch-item {
   display: flex;
-  flex-direction: column;
-  gap: 4px;
+  align-items: center;
+  justify-content: center;
   padding: 12px 14px;
   border-radius: var(--console-radius, 8px);
   border: 1px solid var(--console-border);
   background: rgba(0, 0, 0, 0.15);
   text-decoration: none;
   color: inherit;
+  font-size: 13px;
+  font-weight: 600;
   transition: border-color 0.12s, background 0.12s;
 }
 .launch-item:hover {
   border-color: rgba(94, 240, 255, 0.35);
   background: rgba(61, 231, 255, 0.06);
-}
-.launch-item strong {
-  font-size: 13px;
-}
-.launch-item span {
-  font-size: 12px;
-  color: var(--console-text-3);
 }
 .type-link {
   color: var(--energy, #3de7ff);

@@ -68,10 +68,7 @@ onMounted(load)
 <template>
   <div class="admin-page">
     <header class="page-header">
-      <div>
-        <h1>操作日志</h1>
-        <p>共 {{ total }} 条</p>
-      </div>
+      <h1>操作日志</h1>
       <div class="page-header__actions">
         <button type="button" class="c-btn c-btn--ghost c-btn--sm" @click="clearAll">清空</button>
         <button type="button" class="c-btn c-btn--ghost c-btn--sm" @click="load">刷新</button>

@@ -40,10 +40,15 @@ func (s *AdminService) ImportLegacyDB3(ctx context.Context, path string, mode st
 		return nil, fmt.Errorf("open legacy db: %w", err)
 	}
 
-	// detect format: need category + website tables
+	// detect format: legacy Flask (website/category) or native Next (websites/categories)
+	format := ""
 	var n int
-	if err := src.QueryRow(`SELECT COUNT(1) FROM sqlite_master WHERE type='table' AND name='website'`).Scan(&n); err != nil || n == 0 {
-		return nil, apperr.New(apperr.Validation, "不是有效的 BookNav 导出（缺少 website 表）")
+	if err := src.QueryRow(`SELECT COUNT(1) FROM sqlite_master WHERE type='table' AND name='website'`).Scan(&n); err == nil && n > 0 {
+		format = "legacy"
+	} else if err := src.QueryRow(`SELECT COUNT(1) FROM sqlite_master WHERE type='table' AND name='websites'`).Scan(&n); err == nil && n > 0 {
+		format = "native"
+	} else {
+		return nil, apperr.New(apperr.Validation, "不是有效的 BookNav 数据库（缺少 website/websites 表）")
 	}
 
 	if mode == "replace" {
@@ -66,8 +71,10 @@ func (s *AdminService) ImportLegacyDB3(ctx context.Context, path string, mode st
 
 	// owner
 	ownerID := actor.ID
-	if u, err := s.importLegacyAdmin(ctx, src); err == nil && u != nil {
-		ownerID = u.ID
+	if format == "legacy" {
+		if u, err := s.importLegacyAdmin(ctx, src); err == nil && u != nil {
+			ownerID = u.ID
+		}
 	}
 
 	// categories
@@ -76,8 +83,13 @@ func (s *AdminService) ImportLegacyDB3(ctx context.Context, path string, mode st
 		Name, Desc, Icon, Color string
 		Order, Limit int
 	}
-	rows, err := src.Query(`SELECT id, name, COALESCE(description,''), COALESCE(icon,''), COALESCE(color,'#3DE7FF'),
-		COALESCE("order",0), COALESCE(display_limit,10), parent_id FROM category ORDER BY parent_id IS NOT NULL, "order" DESC, id ASC`)
+	catSQL := `SELECT id, name, COALESCE(description,''), COALESCE(icon,''), COALESCE(color,'#3DE7FF'),
+		COALESCE("order",0), COALESCE(display_limit,10), parent_id FROM category ORDER BY parent_id IS NOT NULL, "order" DESC, id ASC`
+	if format == "native" {
+		catSQL = `SELECT id, name, COALESCE(description,''), COALESCE(icon,''), COALESCE(color,'#3DE7FF'),
+			COALESCE(sort_order,0), COALESCE(display_limit,10), parent_id FROM categories ORDER BY parent_id IS NOT NULL, sort_order DESC, id ASC`
+	}
+	rows, err := src.Query(catSQL)
 	if err != nil {
 		return nil, fmt.Errorf("read category: %w", err)
 	}
@@ -136,10 +148,17 @@ func (s *AdminService) ImportLegacyDB3(ctx context.Context, path string, mode st
 	}
 
 	// websites
-	wrows, err := src.Query(`SELECT id, title, url, COALESCE(description,''), COALESCE(icon,''),
+	webSQL := `SELECT id, title, url, COALESCE(description,''), COALESCE(icon,''),
 		COALESCE(views,0), COALESCE(is_featured,0), COALESCE(sort_order,0), category_id,
 		COALESCE(created_by_id,0), COALESCE(is_private,0), COALESCE(visible_to,''),
-		COALESCE(is_valid,1) FROM website`)
+		COALESCE(is_valid,1) FROM website`
+	if format == "native" {
+		webSQL = `SELECT id, title, url, COALESCE(description,''), COALESCE(icon,''),
+			COALESCE(views,0), COALESCE(is_featured,0), COALESCE(sort_order,0), category_id,
+			COALESCE(created_by,0), COALESCE(is_private,0), '' AS visible_to,
+			COALESCE(is_valid,1) FROM websites`
+	}
+	wrows, err := src.Query(webSQL)
 	if err != nil {
 		return nil, fmt.Errorf("read website: %w", err)
 	}
@@ -150,8 +169,8 @@ func (s *AdminService) ImportLegacyDB3(ctx context.Context, path string, mode st
 	for wrows.Next() {
 		var (
 			id, views, featured, sortOrder, createdBy, private, valid int64
-			title, url, desc, icon, visibleTo string
-			catID sql.NullInt64
+			title, url, desc, icon, visibleTo                        string
+			catID                                                    sql.NullInt64
 		)
 		if err := wrows.Scan(&id, &title, &url, &desc, &icon, &views, &featured, &sortOrder, &catID,
 			&createdBy, &private, &visibleTo, &valid); err != nil {
@@ -199,8 +218,10 @@ func (s *AdminService) ImportLegacyDB3(ctx context.Context, path string, mode st
 		createdSites++
 	}
 
-	// settings (best effort)
-	_ = s.importLegacySettings(ctx, src)
+	// settings (best effort; legacy Flask schema only)
+	if format == "legacy" {
+		_ = s.importLegacySettings(ctx, src)
+	}
 
 	return map[string]int{
 		"categories": createdCats,
