@@ -26,7 +26,12 @@ RUN CGO_ENABLED=0 GOOS=linux go build \
     -o /out/booknav ./cmd/server
 
 # —— Runtime ——
-FROM gcr.io/distroless/static-debian12:nonroot
+# Alpine (Docker Hub) instead of gcr.io/distroless — many VPS block gcr.
+# UID 65532 matches prior nonroot convention for data volume ownership.
+FROM alpine:3.21
+RUN apk add --no-cache ca-certificates tzdata \
+    && addgroup -g 65532 -S nonroot \
+    && adduser -u 65532 -S -G nonroot -H -D nonroot
 WORKDIR /
 COPY --from=server-build /out/booknav /booknav
 ENV BOOKNAV_HTTP_ADDR=:8080 \
