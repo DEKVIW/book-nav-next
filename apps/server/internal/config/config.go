@@ -23,6 +23,9 @@ type Config struct {
 	Env             string // development | production
 	StaticDir       string // 前端 dist；空则仅 API
 	EnableAccessLog bool
+	// CookieSecure: true/false force; empty = auto (HTTPS request or X-Forwarded-Proto only).
+	// Never default Secure=true solely because ENV=production — breaks http://LAN access.
+	CookieSecure string
 }
 
 // Load 从环境变量加载配置；可选读取 .env。
@@ -43,6 +46,7 @@ func Load() (*Config, error) {
 		Env:             getEnv("BOOKNAV_ENV", "development"),
 		StaticDir:       getEnv("BOOKNAV_STATIC_DIR", ""),
 		EnableAccessLog: getEnvBool("BOOKNAV_ACCESS_LOG", true),
+		CookieSecure:    strings.TrimSpace(os.Getenv("BOOKNAV_COOKIE_SECURE")),
 	}
 
 	if cfg.DatabaseURL == "" {
@@ -71,6 +75,19 @@ func Load() (*Config, error) {
 
 func (c *Config) IsDev() bool {
 	return c.Env == "development" || c.Env == "dev"
+}
+
+// CookieSecureMode returns "true" | "false" | "auto".
+func (c *Config) CookieSecureMode() string {
+	v := strings.ToLower(strings.TrimSpace(c.CookieSecure))
+	switch v {
+	case "1", "true", "yes", "on":
+		return "true"
+	case "0", "false", "no", "off":
+		return "false"
+	default:
+		return "auto"
+	}
 }
 
 func getEnv(key, fallback string) string {

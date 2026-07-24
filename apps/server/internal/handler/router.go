@@ -76,7 +76,7 @@ func NewRouter(d Deps) http.Handler {
 	_ = os.MkdirAll(filepath.Join(mediaDir, "icons"), 0o755)
 	r.Handle("/media/*", http.StripPrefix("/media/", http.FileServer(http.Dir(mediaDir))))
 
-	authH := NewAuthHandler(d.Auth, !cfg.IsDev())
+	authH := NewAuthHandler(d.Auth, cfg.CookieSecureMode())
 	portalH := NewPortalHandler(d.Portal, d.Websites, d.Categories, d.Jobs)
 	adminH := NewAdminHandler(d.Admin, d.Websites, d.Categories, d.Settings, d.Jobs)
 

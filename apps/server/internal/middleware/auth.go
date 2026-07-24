@@ -3,6 +3,7 @@ package middleware
 import (
 	"context"
 	"net/http"
+	"strings"
 
 	"github.com/booknav/book-nav/apps/server/internal/domain"
 	"github.com/booknav/book-nav/apps/server/internal/pkg/response"
@@ -127,11 +128,51 @@ func SetSessionCookie(w http.ResponseWriter, sessionID string, maxAge int, secur
 }
 
 func ClearSessionCookie(w http.ResponseWriter) {
-	http.SetCookie(w, &http.Cookie{
-		Name:     SessionCookie,
-		Value:    "",
-		Path:     "/",
-		HttpOnly: true,
-		MaxAge:   -1,
-	})
+	// Clear both Secure and non-Secure variants (HTTP LAN vs HTTPS).
+	for _, secure := range []bool{false, true} {
+		http.SetCookie(w, &http.Cookie{
+			Name:     SessionCookie,
+			Value:    "",
+			Path:     "/",
+			HttpOnly: true,
+			SameSite: http.SameSiteLaxMode,
+			Secure:   secure,
+			MaxAge:   -1,
+		})
+	}
+}
+
+// RequestLooksHTTPS reports TLS or reverse-proxy HTTPS.
+func RequestLooksHTTPS(r *http.Request) bool {
+	if r == nil {
+		return false
+	}
+	if r.TLS != nil {
+		return true
+	}
+	proto := strings.ToLower(strings.TrimSpace(r.Header.Get("X-Forwarded-Proto")))
+	if proto == "https" {
+		return true
+	}
+	// Some proxies send comma-separated list
+	if i := strings.IndexByte(proto, ','); i >= 0 {
+		proto = strings.TrimSpace(proto[:i])
+		if proto == "https" {
+			return true
+		}
+	}
+	return false
+}
+
+// CookieSecureForRequest decides Secure flag.
+// mode: "true" always, "false" never, "auto" only when request is HTTPS.
+func CookieSecureForRequest(r *http.Request, mode string) bool {
+	switch strings.ToLower(strings.TrimSpace(mode)) {
+	case "1", "true", "yes", "on":
+		return true
+	case "0", "false", "no", "off":
+		return false
+	default:
+		return RequestLooksHTTPS(r)
+	}
 }

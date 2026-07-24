@@ -38,12 +38,15 @@ const typeLink: Record<string, string> = {
   vector_index: '/admin/settings?tab=vector',
 }
 
-async function load() {
+async function load(opts?: { quiet?: boolean }) {
   loading.value = true
   try {
     jobs.value = await apiGet('/api/v1/admin/jobs')
   } catch (e: unknown) {
-    toast.error(e instanceof Error ? e.message : '加载失败')
+    // Polling every 3s must not spam toasts (e.g. session cookie missing → 请先登录)
+    if (!opts?.quiet) {
+      toast.error(e instanceof Error ? e.message : '加载失败')
+    }
   } finally {
     loading.value = false
   }
@@ -102,7 +105,7 @@ function statusClass(status: string) {
 
 onMounted(() => {
   load()
-  timer = setInterval(load, 3000)
+  timer = setInterval(() => load({ quiet: true }), 3000)
 })
 onUnmounted(() => {
   if (timer) clearInterval(timer)

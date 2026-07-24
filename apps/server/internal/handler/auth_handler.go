@@ -9,12 +9,12 @@ import (
 )
 
 type AuthHandler struct {
-	auth   *service.AuthService
-	secure bool
+	auth             *service.AuthService
+	cookieSecureMode string // true | false | auto
 }
 
-func NewAuthHandler(auth *service.AuthService, secure bool) *AuthHandler {
-	return &AuthHandler{auth: auth, secure: secure}
+func NewAuthHandler(auth *service.AuthService, cookieSecureMode string) *AuthHandler {
+	return &AuthHandler{auth: auth, cookieSecureMode: cookieSecureMode}
 }
 
 func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
@@ -32,7 +32,9 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 	if in.Remember {
 		maxAge = 30 * 86400
 	}
-	middleware.SetSessionCookie(w, sess.ID, maxAge, h.secure)
+	// HTTP LAN (e.g. http://192.168.x.x) must not get Secure cookies or the browser drops them.
+	secure := middleware.CookieSecureForRequest(r, h.cookieSecureMode)
+	middleware.SetSessionCookie(w, sess.ID, maxAge, secure)
 	response.OK(w, map[string]any{
 		"user":       user.Public(),
 		"csrf_token": sess.CSRFToken,
