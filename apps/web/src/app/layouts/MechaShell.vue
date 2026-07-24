@@ -8,6 +8,7 @@ import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { RouterLink } from 'vue-router'
 import { useAuthStore } from '@/shared/stores/auth'
 import { usePortalStore } from '@/shared/stores/portal'
+import { useToast } from '@/shared/composables/useToast'
 import AppIcon from '@/shared/ui/AppIcon.vue'
 import { iconForCategory } from '@/shared/icons/registry'
 import type { Category } from '@/shared/types/models'
@@ -29,6 +30,7 @@ const emit = defineEmits<{
 
 const auth = useAuthStore()
 const portal = usePortalStore()
+const toast = useToast()
 
 const STORAGE_MODE = 'booknav_sidebar_mode'
 const STORAGE_LEGACY = 'booknav_sidebar_open'
@@ -52,7 +54,98 @@ const aiOn = computed({
   set: (v: boolean) => emit('update:useAi', v),
 })
 
+/** Local root order for optimistic drag (admin only). */
+const localRootOrder = ref<Category[] | null>(null)
+const displayNavCats = computed(() => localRootOrder.value ?? navCats.value)
+const catDragFrom = ref<number | null>(null)
+const catDragOver = ref<number | null>(null)
+const catSortSaving = ref(false)
+/** Skip next root click after a drag so drop doesn't also navigate. */
+let suppressRootClick = false
+
+watch(
+  navCats,
+  () => {
+    localRootOrder.value = null
+  },
+  { deep: true },
+)
+
 const isMobile = () => typeof window !== 'undefined' && window.innerWidth < 900
+
+function onCatDragStart(cat: Category, e: DragEvent) {
+  if (!auth.isAdmin || catSortSaving.value) {
+    e.preventDefault()
+    return
+  }
+  catDragFrom.value = cat.id
+  suppressRootClick = false
+  try {
+    e.dataTransfer!.effectAllowed = 'move'
+    e.dataTransfer!.setData('text/plain', String(cat.id))
+    e.dataTransfer!.setData('text/cat-id', String(cat.id))
+  } catch {
+    /* ignore */
+  }
+  localRootOrder.value = [...displayNavCats.value]
+}
+
+function onCatDragOver(cat: Category, e: DragEvent) {
+  if (!auth.isAdmin || catDragFrom.value == null) return
+  e.preventDefault()
+  e.dataTransfer!.dropEffect = 'move'
+  catDragOver.value = cat.id
+}
+
+function onCatDragLeave(cat: Category) {
+  if (catDragOver.value === cat.id) catDragOver.value = null
+}
+
+function onCatDrop(cat: Category, e: DragEvent) {
+  e.preventDefault()
+  e.stopPropagation()
+  if (!auth.isAdmin) return
+  const fromId = Number(
+    e.dataTransfer?.getData('text/cat-id') ||
+      e.dataTransfer?.getData('text/plain') ||
+      catDragFrom.value,
+  )
+  const list = [...(localRootOrder.value ?? displayNavCats.value)]
+  const from = list.findIndex((c) => c.id === fromId)
+  const to = list.findIndex((c) => c.id === cat.id)
+  catDragFrom.value = null
+  catDragOver.value = null
+  if (from < 0 || to < 0 || from === to) return
+  suppressRootClick = true
+  const [item] = list.splice(from, 1)
+  list.splice(to, 0, item)
+  localRootOrder.value = list
+  void persistRootOrder(list.map((c) => c.id))
+}
+
+function onCatDragEnd() {
+  if (catDragFrom.value != null) suppressRootClick = true
+  catDragFrom.value = null
+  catDragOver.value = null
+  window.setTimeout(() => {
+    suppressRootClick = false
+  }, 50)
+}
+
+async function persistRootOrder(ids: number[]) {
+  if (catSortSaving.value) return
+  catSortSaving.value = true
+  try {
+    await portal.reorderCategories(ids)
+    toast.success('分类排序已保存')
+  } catch (err: unknown) {
+    localRootOrder.value = null
+    toast.error(err instanceof Error ? err.message : '分类排序失败')
+    await portal.loadHome()
+  } finally {
+    catSortSaving.value = false
+  }
+}
 
 function loadSidebarState() {
   const mode = localStorage.getItem(STORAGE_MODE)
@@ -167,6 +260,10 @@ function scrollToCategory(id: number, opts?: { closeOnMobile?: boolean }) {
 }
 
 function onRootClick(cat: Category) {
+  if (suppressRootClick) {
+    suppressRootClick = false
+    return
+  }
   scrollToCategory(cat.id)
   flyoutId.value = null
 }
@@ -407,26 +504,43 @@ defineExpose({
         </button>
       </div>
 
-      <nav class="side-rail__nav">
+      <nav class="side-rail__nav" :class="{ 'side-rail__nav--sorting': catSortSaving }">
         <div
-          v-for="cat in navCats"
+          v-for="cat in displayNavCats"
           :key="cat.id"
           class="side-group"
-          :class="{ 'side-group--flyout': flyoutId === cat.id }"
+          :class="{
+            'side-group--flyout': flyoutId === cat.id,
+            'side-group--drag-over': catDragOver === cat.id && catDragFrom !== cat.id,
+            'side-group--dragging': catDragFrom === cat.id,
+          }"
+          @dragover="onCatDragOver(cat, $event)"
+          @dragleave="onCatDragLeave(cat)"
+          @drop="onCatDrop(cat, $event)"
         >
           <div
             class="side-item"
             :class="{
               'side-item--active': activeCat === cat.id,
               'side-item--has-children': !!cat.children?.length,
+              'side-item--sortable': auth.isAdmin,
             }"
           >
-            <button
-              type="button"
+            <!-- div (not button): HTML5 drag does not start from nested <button> -->
+            <div
               class="side-item__main"
-              :title="cat.name"
+              role="button"
+              tabindex="0"
+              :draggable="!!(auth.isAdmin && !catSortSaving)"
+              :title="auth.isAdmin ? `${cat.name}（拖拽排序）` : cat.name"
               @click="onRootClick(cat)"
+              @keydown.enter.prevent="onRootClick(cat)"
+              @dragstart="onCatDragStart(cat, $event)"
+              @dragend="onCatDragEnd"
             >
+              <span v-if="auth.isAdmin" class="side-item__grip" aria-hidden="true" title="拖拽排序">
+                <AppIcon name="grip-vertical" :size="14" />
+              </span>
               <span class="side-item__icon">
                 <AppIcon :name="iconForCategory(cat.icon, cat.id)" :size="18" />
               </span>
@@ -434,7 +548,7 @@ defineExpose({
               <span class="side-item__count">
                 {{ cat.total_count_with_children ?? cat.website_count ?? cat.websites?.length ?? 0 }}
               </span>
-            </button>
+            </div>
             <button
               v-if="cat.children?.length"
               type="button"
@@ -794,6 +908,41 @@ defineExpose({
   padding: 10px 8px;
   -webkit-overflow-scrolling: touch;
 }
+.side-rail__nav--sorting {
+  opacity: 0.75;
+  pointer-events: none;
+}
+.side-group {
+  position: relative;
+}
+.side-group--dragging {
+  opacity: 0.45;
+}
+.side-group--drag-over > .side-item {
+  box-shadow: inset 0 0 0 1px var(--energy-dim);
+  border-radius: 12px;
+}
+.side-item__main[draggable='true'] {
+  cursor: grab;
+}
+.side-item__main[draggable='true']:active {
+  cursor: grabbing;
+}
+.side-item__grip {
+  display: none;
+  place-items: center;
+  width: 16px;
+  flex-shrink: 0;
+  color: var(--text-muted);
+  opacity: 0.55;
+}
+.shell--rail-expanded .side-item--sortable .side-item__grip {
+  display: grid;
+}
+.side-item--sortable .side-item__main:hover .side-item__grip {
+  color: var(--energy);
+  opacity: 1;
+}
 
 .side-rail__foot {
   flex-shrink: 0;
@@ -841,10 +990,6 @@ defineExpose({
   display: inline;
 }
 
-.side-group {
-  position: relative;
-}
-
 .side-item {
   display: flex;
   align-items: stretch;
@@ -875,6 +1020,9 @@ defineExpose({
   color: var(--text-secondary);
   font: inherit;
   text-align: left;
+  cursor: pointer;
+  user-select: none;
+  border-radius: 12px;
 }
 .shell--rail-collapsed .side-item__main {
   justify-content: center;

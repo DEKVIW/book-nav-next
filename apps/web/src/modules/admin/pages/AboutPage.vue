@@ -57,8 +57,6 @@ const links: LinkItem[] = [
 
 type VersionInfo = {
   version?: string
-  commit?: string
-  build_time?: string
   uptime_sec?: number
 }
 
@@ -76,16 +74,6 @@ onMounted(async () => {
 })
 
 const versionLabel = computed(() => version.value.version || '—')
-const commitLabel = computed(() => {
-  const c = version.value.commit
-  if (!c || c === 'unknown') return '—'
-  return c.length > 12 ? c.slice(0, 7) : c
-})
-const buildTimeLabel = computed(() => {
-  const t = version.value.build_time
-  if (!t || t === 'unknown') return '—'
-  return t
-})
 const uptimeLabel = computed(() => {
   const s = version.value.uptime_sec
   if (s == null || Number.isNaN(s)) return '—'
@@ -121,14 +109,6 @@ const uptimeLabel = computed(() => {
           <div class="about-meta__row">
             <dt>版本</dt>
             <dd class="mono">{{ versionLabel }}</dd>
-          </div>
-          <div class="about-meta__row">
-            <dt>Commit</dt>
-            <dd class="mono">{{ commitLabel }}</dd>
-          </div>
-          <div class="about-meta__row">
-            <dt>构建时间</dt>
-            <dd class="mono">{{ buildTimeLabel }}</dd>
           </div>
           <div class="about-meta__row">
             <dt>运行时长</dt>

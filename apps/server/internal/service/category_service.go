@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"strconv"
 	"strings"
 
 	"github.com/booknav/book-nav/apps/server/internal/domain"
@@ -155,6 +156,74 @@ func (s *CategoryService) Delete(ctx context.Context, id int64) error {
 	return s.repo.Delete(ctx, id)
 }
 
+// Reorder rewrites sort_order for a sibling group (same parent_id, or all roots).
+// ids must be a permutation of one sibling set; first id gets highest sort_order (list DESC).
 func (s *CategoryService) Reorder(ctx context.Context, ids []int64) error {
-	return s.repo.UpdateOrders(ctx, ids)
+	if len(ids) == 0 {
+		return apperr.New(apperr.Validation, "排序列表不能为空")
+	}
+	seen := map[int64]bool{}
+	clean := make([]int64, 0, len(ids))
+	for _, id := range ids {
+		if id <= 0 || seen[id] {
+			continue
+		}
+		seen[id] = true
+		clean = append(clean, id)
+	}
+	if len(clean) == 0 {
+		return apperr.New(apperr.Validation, "排序列表无效")
+	}
+
+	var parentKey string
+	var parentID *int64
+	for i, id := range clean {
+		c, err := s.repo.GetByID(ctx, id)
+		if err != nil {
+			return err
+		}
+		if c == nil {
+			return apperr.New(apperr.NotFound, "分类不存在")
+		}
+		key := parentGroupKey(c.ParentID)
+		if i == 0 {
+			parentKey = key
+			parentID = c.ParentID
+		} else if key != parentKey {
+			return apperr.New(apperr.Validation, "只能对同一父级下的分类排序")
+		}
+	}
+
+	all, err := s.repo.ListAll(ctx)
+	if err != nil {
+		return err
+	}
+	var siblings []int64
+	for _, c := range all {
+		same := (parentID == nil && c.ParentID == nil) ||
+			(parentID != nil && c.ParentID != nil && *c.ParentID == *parentID)
+		if same {
+			siblings = append(siblings, c.ID)
+		}
+	}
+	if len(siblings) != len(clean) {
+		return apperr.New(apperr.Validation, "排序列表须包含该级全部同级分类")
+	}
+	sibSet := map[int64]bool{}
+	for _, id := range siblings {
+		sibSet[id] = true
+	}
+	for _, id := range clean {
+		if !sibSet[id] {
+			return apperr.New(apperr.Validation, "排序列表包含非同级分类")
+		}
+	}
+	return s.repo.UpdateOrders(ctx, clean)
+}
+
+func parentGroupKey(parentID *int64) string {
+	if parentID == nil {
+		return ""
+	}
+	return strconv.FormatInt(*parentID, 10)
 }

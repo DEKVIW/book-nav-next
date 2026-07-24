@@ -31,12 +31,10 @@ func (h *Handler) Ready(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// Version 构建信息。
+// Version 版本与运行时长（关于页用）。
 func (h *Handler) Version(w http.ResponseWriter, r *http.Request) {
 	response.OK(w, map[string]any{
 		"version":    version.Version,
-		"commit":     version.Commit,
-		"build_time": version.BuildTime,
 		"uptime_sec": int(time.Since(h.startedAt).Seconds()),
 	})
 }
