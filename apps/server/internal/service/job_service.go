@@ -464,51 +464,24 @@ func (s *JobService) runIconFetch(jobID int64) {
 		return
 	}
 	j.Total = len(sites)
-	iconDir := filepath.Join(s.dataDir, "uploads", "icons")
-	_ = os.MkdirAll(iconDir, 0o755)
-
-	// load icon settings for source providers + sync preferences
-	providers := defaultIconSourceProviders()
-	syncLocal := true
-	if s.settings != nil {
-		if adminMap, err := s.settings.GetNamespaceForAdmin(ctx, "icon"); err == nil {
-			providers = mergeIconSourceProviders(adminMap["source_providers"])
-			if v, ok := adminMap["sync_local"].(bool); ok {
-				syncLocal = v
-			}
-		}
-	}
+	_ = s.jobs.Update(ctx, j)
 
 	for i, site := range sites {
 		if s.isCancelled(ctx, jobID) {
 			return
 		}
-		// already local media path — skip
-		if strings.TrimSpace(site.Icon) != "" && strings.HasPrefix(site.Icon, "/media/") {
-			j.Success++
-			j.Progress = i + 1
-			_ = s.jobs.Update(ctx, j)
-			continue
-		}
-		iconURL, err := s.discoverIconWithProviders(site.URL, providers)
-		if err != nil || iconURL == "" {
-			j.Failed++
-			j.Progress = i + 1
-			_ = s.jobs.Update(ctx, j)
-			continue
-		}
-		if syncLocal {
-			local, err := s.downloadIcon(iconURL, iconDir)
-			if err != nil {
-				site.Icon = iconURL
+		// reuse SyncWebsiteIcon: domain share + discover + local download
+		if err := s.SyncWebsiteIcon(ctx, site.ID, false); err != nil {
+			// still count empty icons as failed if still no icon
+			fresh, _ := s.websites.GetByID(ctx, site.ID)
+			if fresh == nil || strings.TrimSpace(fresh.Icon) == "" {
+				j.Failed++
 			} else {
-				site.Icon = "/media/icons/" + filepath.Base(local)
+				j.Success++
 			}
 		} else {
-			site.Icon = iconURL
+			j.Success++
 		}
-		_ = s.websites.Update(ctx, &site)
-		j.Success++
 		j.Progress = i + 1
 		if s.isCancelled(ctx, jobID) {
 			return

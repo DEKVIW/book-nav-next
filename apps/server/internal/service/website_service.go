@@ -14,10 +14,16 @@ type WebsiteService struct {
 	websites   *repository.WebsiteRepo
 	categories *repository.CategoryRepo
 	oplog      *repository.OpLogRepo
+	hooks      SiteSideEffects // optional: icon + vector lifecycle (legacy parity)
 }
 
 func NewWebsiteService(w *repository.WebsiteRepo, c *repository.CategoryRepo, o *repository.OpLogRepo) *WebsiteService {
 	return &WebsiteService{websites: w, categories: c, oplog: o}
+}
+
+// SetSideEffects wires icon/vector hooks after construction (avoids init cycles).
+func (s *WebsiteService) SetSideEffects(h SiteSideEffects) {
+	s.hooks = h
 }
 
 type WebsiteInput struct {
@@ -73,7 +79,16 @@ func (s *WebsiteService) Create(ctx context.Context, user *domain.User, in Websi
 	if err := s.websites.Create(ctx, w); err != nil {
 		return nil, err
 	}
+	// attach category name for logs / hooks
+	if w.CategoryID != nil {
+		if c, _ := s.categories.GetByID(ctx, *w.CategoryID); c != nil {
+			w.CategoryName = c.Name
+		}
+	}
 	_ = s.log(ctx, user.ID, "ADD", w, "{}")
+	if s.hooks != nil {
+		s.hooks.AfterWebsiteCreate(w.ID)
+	}
 	return w, nil
 }
 
@@ -88,6 +103,16 @@ func (s *WebsiteService) Update(ctx context.Context, user *domain.User, id int64
 	if !domain.CanEditWebsite(w, user) {
 		return nil, apperr.New(apperr.Forbidden, "无权编辑")
 	}
+
+	oldTitle := w.Title
+	oldDesc := w.Description
+	oldURL := w.URL
+	oldIcon := w.Icon
+	var oldCat int64
+	if w.CategoryID != nil {
+		oldCat = *w.CategoryID
+	}
+
 	if strings.TrimSpace(in.URL) != "" {
 		w.URL = normalizeURL(in.URL)
 	}
@@ -95,15 +120,8 @@ func (s *WebsiteService) Update(ctx context.Context, user *domain.User, id int64
 		w.Title = strings.TrimSpace(in.Title)
 	}
 	w.Description = strings.TrimSpace(in.Description)
-	if in.Icon != "" || in.Icon == "" {
-		// allow clear only if key present - for simplicity always set if provided via pointer later
-	}
 	// Always apply provided fields from JSON layer (handler fills full input)
-	if in.Title != "" {
-		w.Title = strings.TrimSpace(in.Title)
-	}
-	w.Description = in.Description
-	w.Icon = in.Icon
+	w.Icon = strings.TrimSpace(in.Icon)
 	w.CategoryID = in.CategoryID
 	w.IsFeatured = in.IsFeatured
 	w.IsPrivate = in.IsPrivate
@@ -116,8 +134,25 @@ func (s *WebsiteService) Update(ctx context.Context, user *domain.User, id int64
 	if err := s.websites.Update(ctx, w); err != nil {
 		return nil, err
 	}
+	if w.CategoryID != nil {
+		if c, _ := s.categories.GetByID(ctx, *w.CategoryID); c != nil {
+			w.CategoryName = c.Name
+		}
+	}
 	details, _ := json.Marshal(in)
 	_ = s.log(ctx, user.ID, "MODIFY", w, string(details))
+
+	// legacy: title/description/category change → reindex vector
+	var newCat int64
+	if w.CategoryID != nil {
+		newCat = *w.CategoryID
+	}
+	reindex := w.Title != oldTitle || w.Description != oldDesc || newCat != oldCat
+	// legacy: icon or url change → resync icon (domain reuse / re-fetch)
+	resyncIcon := w.URL != oldURL || w.Icon != oldIcon
+	if s.hooks != nil && (reindex || resyncIcon) {
+		s.hooks.AfterWebsiteUpdate(w.ID, reindex, resyncIcon)
+	}
 	return w, nil
 }
 
@@ -136,6 +171,9 @@ func (s *WebsiteService) Delete(ctx context.Context, user *domain.User, id int64
 		return err
 	}
 	_ = s.log(ctx, user.ID, "DELETE", w, "{}")
+	if s.hooks != nil {
+		s.hooks.AfterWebsiteDelete(id)
+	}
 	return nil
 }
 
@@ -148,7 +186,14 @@ func (s *WebsiteService) BatchDelete(ctx context.Context, user *domain.User, ids
 			_ = s.log(ctx, user.ID, "DELETE", w, "{}")
 		}
 	}
-	return s.websites.DeleteMany(ctx, ids)
+	n, err := s.websites.DeleteMany(ctx, ids)
+	if err != nil {
+		return n, err
+	}
+	if s.hooks != nil && len(ids) > 0 {
+		s.hooks.AfterWebsiteDelete(ids...)
+	}
+	return n, nil
 }
 
 func (s *WebsiteService) Reorder(ctx context.Context, user *domain.User, categoryID *int64, ids []int64) error {

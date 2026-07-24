@@ -105,7 +105,13 @@ async function logout() {
           <span class="admin-top-link__text">任务中心</span>
         </RouterLink>
         <div class="admin-user" :title="auth.user?.email">
-          <span class="admin-user__avatar">{{ initial }}</span>
+          <img
+            v-if="auth.user?.avatar"
+            class="admin-user__avatar admin-user__avatar--img"
+            :src="auth.user.avatar"
+            alt=""
+          />
+          <span v-else class="admin-user__avatar">{{ initial }}</span>
           <span class="admin-user__name">{{ auth.user?.username }}</span>
         </div>
         <button type="button" class="admin-top-link" @click="logout">

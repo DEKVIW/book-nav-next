@@ -100,6 +100,61 @@ func (r *WebsiteRepo) FindByURL(ctx context.Context, url string) (*domain.Websit
 	return scanWebsite(row)
 }
 
+// FindLocalIconByDomain returns a shared /media/... icon from another site under the same host.
+// domain should be bare host without www (e.g. "github.com"). excludeID skips the current site.
+func (r *WebsiteRepo) FindLocalIconByDomain(ctx context.Context, domain string, excludeID int64) (string, error) {
+	domain = strings.ToLower(strings.TrimSpace(domain))
+	domain = strings.TrimPrefix(domain, "www.")
+	if domain == "" {
+		return "", nil
+	}
+	// Prefer local media icons only
+	rows, err := r.db.QueryContext(ctx, `
+SELECT w.id, w.url, w.icon FROM websites w
+WHERE w.icon LIKE '/media/%' AND TRIM(w.icon) != ''
+ORDER BY w.id ASC`)
+	if err != nil {
+		return "", err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var id int64
+		var rawURL, icon string
+		if err := rows.Scan(&id, &rawURL, &icon); err != nil {
+			return "", err
+		}
+		if excludeID > 0 && id == excludeID {
+			continue
+		}
+		if domainKeyFromURL(rawURL) == domain {
+			return strings.TrimSpace(icon), nil
+		}
+	}
+	return "", rows.Err()
+}
+
+// domainKeyFromURL is shared with service layer via same rules (package-local helper).
+func domainKeyFromURL(raw string) string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return ""
+	}
+	// cheap parse without importing net/url cycles — use strings
+	// expect http(s)://host/...
+	lower := strings.ToLower(raw)
+	if i := strings.Index(lower, "://"); i >= 0 {
+		lower = lower[i+3:]
+	}
+	if i := strings.IndexAny(lower, "/?#"); i >= 0 {
+		lower = lower[:i]
+	}
+	if i := strings.Index(lower, ":"); i >= 0 {
+		lower = lower[:i]
+	}
+	lower = strings.TrimPrefix(lower, "www.")
+	return lower
+}
+
 const websiteSelect = `
 SELECT w.id, w.title, w.url, w.description, w.icon, w.category_id, w.created_by,
        w.is_featured, w.is_private, w.sort_order, w.views, w.is_valid, w.created_at, w.updated_at,
@@ -231,6 +286,12 @@ func (r *WebsiteRepo) Count(ctx context.Context) (int, error) {
 func (r *WebsiteRepo) CountByCategory(ctx context.Context, categoryID int64) (int, error) {
 	var n int
 	err := r.db.QueryRowContext(ctx, `SELECT COUNT(1) FROM websites WHERE category_id = ?`, categoryID).Scan(&n)
+	return n, err
+}
+
+func (r *WebsiteRepo) CountByCreatedBy(ctx context.Context, userID int64) (int, error) {
+	var n int
+	err := r.db.QueryRowContext(ctx, `SELECT COUNT(1) FROM websites WHERE created_by = ?`, userID).Scan(&n)
 	return n, err
 }
 

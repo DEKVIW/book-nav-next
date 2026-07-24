@@ -18,11 +18,13 @@ func (u *User) Public() map[string]any {
 		return nil
 	}
 	return map[string]any{
-		"id":       u.ID,
-		"username": u.Username,
-		"email":    u.Email,
-		"avatar":   u.Avatar,
-		"role":     u.Role,
+		"id":         u.ID,
+		"username":   u.Username,
+		"email":      u.Email,
+		"avatar":     u.Avatar,
+		"role":       u.Role,
+		"created_at": u.CreatedAt,
+		"updated_at": u.UpdatedAt,
 	}
 }
 

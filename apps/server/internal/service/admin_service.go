@@ -17,6 +17,7 @@ import (
 	"github.com/booknav/book-nav/apps/server/internal/domain"
 	"github.com/booknav/book-nav/apps/server/internal/pkg/apperr"
 	"github.com/booknav/book-nav/apps/server/internal/pkg/password"
+	"github.com/booknav/book-nav/apps/server/internal/pkg/vector"
 	"github.com/booknav/book-nav/apps/server/internal/repository"
 	_ "modernc.org/sqlite"
 )
@@ -71,7 +72,16 @@ func (s *AdminService) ListUsers(ctx context.Context) ([]domain.User, error) {
 	return s.users.List(ctx)
 }
 
-func (s *AdminService) UpdateUser(ctx context.Context, actor *domain.User, id int64, role domain.Role, newPassword string) (*domain.User, error) {
+// UserUpdateInput is the full admin edit payload (aligned with legacy Flask user edit).
+type UserUpdateInput struct {
+	Username    *string      // optional; empty string rejected
+	Email       *string      // optional
+	Role        *domain.Role // optional; must be valid if set
+	NewPassword string       // empty = keep
+	Avatar      *string      // optional; set absolute media path or empty to clear
+}
+
+func (s *AdminService) UpdateUser(ctx context.Context, actor *domain.User, id int64, in UserUpdateInput) (*domain.User, error) {
 	if actor == nil || !actor.Role.IsSuperAdmin() {
 		return nil, apperr.New(apperr.Forbidden, "需要超级管理员")
 	}
@@ -79,23 +89,156 @@ func (s *AdminService) UpdateUser(ctx context.Context, actor *domain.User, id in
 	if err != nil || u == nil {
 		return nil, apperr.New(apperr.NotFound, "用户不存在")
 	}
-	if role.Valid() {
+
+	if in.Username != nil {
+		name := strings.TrimSpace(*in.Username)
+		if name == "" {
+			return nil, apperr.New(apperr.Validation, "用户名不能为空")
+		}
+		if len(name) > 64 {
+			return nil, apperr.New(apperr.Validation, "用户名过长")
+		}
+		if name != u.Username {
+			exist, err := s.users.GetByUsername(ctx, name)
+			if err != nil {
+				return nil, err
+			}
+			if exist != nil && exist.ID != u.ID {
+				return nil, apperr.New(apperr.Conflict, "用户名已被占用")
+			}
+			u.Username = name
+		}
+	}
+
+	if in.Email != nil {
+		email := strings.TrimSpace(*in.Email)
+		if email == "" {
+			return nil, apperr.New(apperr.Validation, "邮箱不能为空")
+		}
+		if len(email) > 190 {
+			return nil, apperr.New(apperr.Validation, "邮箱过长")
+		}
+		if email != u.Email {
+			exist, err := s.users.GetByEmail(ctx, email)
+			if err != nil {
+				return nil, err
+			}
+			if exist != nil && exist.ID != u.ID {
+				return nil, apperr.New(apperr.Conflict, "邮箱已被占用")
+			}
+			u.Email = email
+		}
+	}
+
+	if in.Role != nil {
+		role := *in.Role
+		if !role.Valid() {
+			return nil, apperr.New(apperr.Validation, "无效角色")
+		}
 		if u.ID == actor.ID && role != domain.RoleSuperAdmin {
 			return nil, apperr.New(apperr.Validation, "不能取消自己的超管身份")
 		}
 		u.Role = role
 	}
-	if newPassword != "" {
-		hash, err := password.Hash(newPassword)
+
+	if in.NewPassword != "" {
+		if len(in.NewPassword) < 6 {
+			return nil, apperr.New(apperr.Validation, "密码至少 6 位")
+		}
+		hash, err := password.Hash(in.NewPassword)
 		if err != nil {
 			return nil, err
 		}
 		u.PasswordHash = hash
 	}
+
+	if in.Avatar != nil {
+		u.Avatar = strings.TrimSpace(*in.Avatar)
+	}
+
 	if err := s.users.Update(ctx, u); err != nil {
 		return nil, err
 	}
 	return u, nil
+}
+
+// UploadUserAvatar stores an image under data/uploads/avatars and updates the user.
+// Returns the public /media/... path.
+func (s *AdminService) UploadUserAvatar(ctx context.Context, actor *domain.User, id int64, filename string, r io.Reader) (*domain.User, error) {
+	if actor == nil || !actor.Role.IsSuperAdmin() {
+		return nil, apperr.New(apperr.Forbidden, "需要超级管理员")
+	}
+	u, err := s.users.GetByID(ctx, id)
+	if err != nil || u == nil {
+		return nil, apperr.New(apperr.NotFound, "用户不存在")
+	}
+
+	ext := strings.ToLower(filepath.Ext(filename))
+	switch ext {
+	case ".jpg", ".jpeg", ".png", ".gif", ".webp":
+	default:
+		return nil, apperr.New(apperr.Validation, "仅支持 JPG / PNG / GIF / WebP")
+	}
+
+	dir := filepath.Join(s.dataDir, "uploads", "avatars")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return nil, err
+	}
+	// unique name: timestamp_userid_random.ext
+	var rnd [4]byte
+	_, _ = rand.Read(rnd[:])
+	name := fmt.Sprintf("%s_%d_%s%s", time.Now().UTC().Format("20060102150405"), id, hex.EncodeToString(rnd[:]), ext)
+	dst := filepath.Join(dir, name)
+
+	f, err := os.Create(dst)
+	if err != nil {
+		return nil, err
+	}
+	// limit ~5MB
+	const maxAvatar = 5 << 20
+	n, err := io.Copy(f, io.LimitReader(r, maxAvatar+1))
+	_ = f.Close()
+	if err != nil {
+		_ = os.Remove(dst)
+		return nil, err
+	}
+	if n > maxAvatar {
+		_ = os.Remove(dst)
+		return nil, apperr.New(apperr.Validation, "头像不能超过 5MB")
+	}
+
+	public := "/media/avatars/" + name
+	// best-effort remove previous local avatar
+	if strings.HasPrefix(u.Avatar, "/media/avatars/") {
+		old := filepath.Join(s.dataDir, "uploads", "avatars", filepath.Base(u.Avatar))
+		_ = os.Remove(old)
+	}
+	u.Avatar = public
+	if err := s.users.Update(ctx, u); err != nil {
+		return nil, err
+	}
+	return u, nil
+}
+
+func (s *AdminService) DeleteUser(ctx context.Context, actor *domain.User, id int64) error {
+	if actor == nil || !actor.Role.IsSuperAdmin() {
+		return apperr.New(apperr.Forbidden, "需要超级管理员")
+	}
+	if actor.ID == id {
+		return apperr.New(apperr.Validation, "不能删除当前登录的用户")
+	}
+	u, err := s.users.GetByID(ctx, id)
+	if err != nil || u == nil {
+		return apperr.New(apperr.NotFound, "用户不存在")
+	}
+	n, err := s.websites.CountByCreatedBy(ctx, id)
+	if err != nil {
+		return err
+	}
+	if n > 0 {
+		return apperr.New(apperr.Validation, fmt.Sprintf("该用户已创建了 %d 个网站，请先处理这些内容", n))
+	}
+	return s.users.Delete(ctx, id)
 }
 
 func (s *AdminService) GenerateInvites(ctx context.Context, actor *domain.User, count int) ([]domain.InvitationCode, error) {
@@ -659,7 +802,17 @@ func copyDir(src, dst string) error {
 }
 
 func (s *AdminService) ClearWebsites(ctx context.Context) error {
-	return s.websites.ClearAll(ctx)
+	if err := s.websites.ClearAll(ctx); err != nil {
+		return err
+	}
+	// legacy: clear vectors when wiping all sites (best-effort)
+	if s.settings != nil {
+		if cfg, _ := s.settings.VectorConfig(ctx); cfg.QdrantURL != "" {
+			client := vector.NewClient(cfg)
+			_ = client.ClearCollection(ctx)
+		}
+	}
+	return nil
 }
 
 func randomInviteCode(n int) (string, error) {

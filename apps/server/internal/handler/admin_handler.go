@@ -180,19 +180,66 @@ func (h *AdminHandler) ListUsers(w http.ResponseWriter, r *http.Request) {
 func (h *AdminHandler) UpdateUser(w http.ResponseWriter, r *http.Request) {
 	id, _ := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
 	var body struct {
-		Role        string `json:"role"`
-		NewPassword string `json:"new_password"`
+		Username    *string `json:"username"`
+		Email       *string `json:"email"`
+		Role        *string `json:"role"`
+		NewPassword string  `json:"new_password"`
+		// Avatar path update is via UploadUserAvatar; optional clear with ""
+		Avatar *string `json:"avatar"`
 	}
 	if err := decodeJSON(r, &body); err != nil {
 		response.BadRequest(w, "invalid json")
 		return
 	}
-	u, err := h.admin.UpdateUser(r.Context(), middleware.UserFrom(r.Context()), id, domain.Role(body.Role), body.NewPassword)
+	in := service.UserUpdateInput{
+		Username:    body.Username,
+		Email:       body.Email,
+		NewPassword: body.NewPassword,
+		Avatar:      body.Avatar,
+	}
+	if body.Role != nil {
+		role := domain.Role(*body.Role)
+		in.Role = &role
+	}
+	u, err := h.admin.UpdateUser(r.Context(), middleware.UserFrom(r.Context()), id, in)
 	if err != nil {
 		writeErr(w, err)
 		return
 	}
 	response.OK(w, u.Public())
+}
+
+// UploadUserAvatar accepts multipart field "avatar" (or "file").
+func (h *AdminHandler) UploadUserAvatar(w http.ResponseWriter, r *http.Request) {
+	id, _ := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
+	if err := r.ParseMultipartForm(6 << 20); err != nil {
+		response.BadRequest(w, "invalid multipart form")
+		return
+	}
+	file, hdr, err := r.FormFile("avatar")
+	if err != nil {
+		file, hdr, err = r.FormFile("file")
+	}
+	if err != nil {
+		response.BadRequest(w, "请选择头像文件")
+		return
+	}
+	defer file.Close()
+	u, err := h.admin.UploadUserAvatar(r.Context(), middleware.UserFrom(r.Context()), id, hdr.Filename, file)
+	if err != nil {
+		writeErr(w, err)
+		return
+	}
+	response.OKMessage(w, u.Public(), "头像已更新")
+}
+
+func (h *AdminHandler) DeleteUser(w http.ResponseWriter, r *http.Request) {
+	id, _ := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
+	if err := h.admin.DeleteUser(r.Context(), middleware.UserFrom(r.Context()), id); err != nil {
+		writeErr(w, err)
+		return
+	}
+	response.OKMessage(w, nil, "用户已删除")
 }
 
 func (h *AdminHandler) ListInvites(w http.ResponseWriter, r *http.Request) {

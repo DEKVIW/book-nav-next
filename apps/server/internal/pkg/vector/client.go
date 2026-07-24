@@ -147,6 +147,39 @@ func (c *Client) DeletePoint(ctx context.Context, id int64) error {
 	return c.postJSON(ctx, fmt.Sprintf("%s/collections/%s/points/delete?wait=true", c.cfg.QdrantURL, c.cfg.Collection), "", body, nil)
 }
 
+// DeletePoints removes multiple points by id (best-effort batch).
+func (c *Client) DeletePoints(ctx context.Context, ids []int64) error {
+	if len(ids) == 0 {
+		return nil
+	}
+	body := map[string]any{"points": ids}
+	return c.postJSON(ctx, fmt.Sprintf("%s/collections/%s/points/delete?wait=true", c.cfg.QdrantURL, c.cfg.Collection), "", body, nil)
+}
+
+// ClearCollection wipes the collection by recreate (legacy: clear all site vectors).
+func (c *Client) ClearCollection(ctx context.Context) error {
+	if c.cfg.QdrantURL == "" {
+		return fmt.Errorf("qdrant url not configured")
+	}
+	// drop collection if exists, then EnsureCollection rebuilds empty
+	req, err := http.NewRequestWithContext(ctx, http.MethodDelete,
+		fmt.Sprintf("%s/collections/%s", c.cfg.QdrantURL, c.cfg.Collection), nil)
+	if err != nil {
+		return err
+	}
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return err
+	}
+	_, _ = io.Copy(io.Discard, resp.Body)
+	_ = resp.Body.Close()
+	// 404 = already gone — fine
+	if resp.StatusCode >= 400 && resp.StatusCode != 404 {
+		return fmt.Errorf("delete collection: status %d", resp.StatusCode)
+	}
+	return c.EnsureCollection(ctx)
+}
+
 // SearchResult from qdrant.
 type SearchResult struct {
 	ID    int64

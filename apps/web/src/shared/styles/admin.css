@@ -148,6 +148,13 @@
   color: #fff;
   font-size: 11px;
   font-weight: 700;
+  flex-shrink: 0;
+  object-fit: cover;
+}
+.admin-user__avatar--img {
+  display: block;
+  padding: 0;
+  background: transparent;
 }
 
 /* 侧栏：固定在顶栏下方；顶行与顶栏同高，结构对齐 */

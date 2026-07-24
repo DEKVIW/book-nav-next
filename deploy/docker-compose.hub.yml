@@ -1,0 +1,25 @@
+# Production-style run from Docker Hub (no local build).
+# Usage on server:
+#   docker compose -f deploy/docker-compose.hub.yml pull
+#   docker compose -f deploy/docker-compose.hub.yml up -d
+#
+# Requires:
+#   - .env next to this file's parent (repo root) or copy env into place
+#   - data volume path writable by UID 65532 (distroless nonroot)
+
+services:
+  booknav:
+    image: yilan666/booknav-next:${BOOKNAV_IMAGE_TAG:-latest}
+    container_name: booknav
+    restart: unless-stopped
+    ports:
+      - "${BOOKNAV_HOST_PORT:-8988}:8080"
+    volumes:
+      - ${BOOKNAV_DATA_DIR:-./data}:/data
+    env_file:
+      - ${BOOKNAV_ENV_FILE:-../.env}
+    environment:
+      BOOKNAV_ENV: production
+      BOOKNAV_HTTP_ADDR: ":8080"
+      BOOKNAV_DATA_DIR: /data
+      BOOKNAV_STATIC_DIR: /webdist

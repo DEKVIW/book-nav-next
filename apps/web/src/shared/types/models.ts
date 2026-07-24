@@ -6,6 +6,8 @@ export interface User {
   email: string
   avatar?: string
   role: Role
+  created_at?: string
+  updated_at?: string
 }
 
 export interface Website {

@@ -56,6 +56,8 @@ func New(cfg *config.Config) (*App, error) {
 	categorySvc := service.NewCategoryService(categories, websites)
 	adminSvc := service.NewAdminService(users, invites, websites, categories, oplog, jobs, settingsSvc, cfg.DataDir, dbPath)
 	jobSvc := service.NewJobService(jobs, websites, deadlinks, settingsSvc, cfg.DataDir)
+	// legacy parity: create→icon+vector, update→conditional, delete→clear vector
+	websiteSvc.SetSideEffects(jobSvc)
 
 	ctx := context.Background()
 	if err := seed(ctx, cfg, users, settingsSvc, categories, websites); err != nil {
