@@ -98,3 +98,9 @@ func (r *OpLogRepo) ClearAll(ctx context.Context) error {
 	_, err := r.db.ExecContext(ctx, `DELETE FROM operation_logs`)
 	return err
 }
+
+func (r *OpLogRepo) Count(ctx context.Context) (int, error) {
+	var n int
+	err := r.db.QueryRowContext(ctx, `SELECT COUNT(1) FROM operation_logs`).Scan(&n)
+	return n, err
+}

@@ -681,12 +681,76 @@ func (h *AdminHandler) ListRemoteWebDAV(w http.ResponseWriter, r *http.Request) 
 	response.OK(w, list)
 }
 
-func (h *AdminHandler) ClearWebsites(w http.ResponseWriter, r *http.Request) {
-	if err := h.admin.ClearWebsites(r.Context()); err != nil {
+func (h *AdminHandler) CleanupStats(w http.ResponseWriter, r *http.Request) {
+	stats, err := h.admin.CleanupStats(r.Context())
+	if err != nil {
 		writeErr(w, err)
 		return
 	}
-	response.OKMessage(w, nil, "cleared")
+	response.OK(w, stats)
+}
+
+func (h *AdminHandler) ClearWebsites(w http.ResponseWriter, r *http.Request) {
+	stats, err := h.admin.ClearWebsites(r.Context())
+	if err != nil {
+		writeErr(w, err)
+		return
+	}
+	response.OKMessage(w, stats, "已清空全部链接")
+}
+
+func (h *AdminHandler) ClearCategories(w http.ResponseWriter, r *http.Request) {
+	stats, err := h.admin.ClearCategories(r.Context())
+	if err != nil {
+		writeErr(w, err)
+		return
+	}
+	response.OKMessage(w, stats, "已清空全部分类")
+}
+
+func (h *AdminHandler) ClearNavigation(w http.ResponseWriter, r *http.Request) {
+	stats, err := h.admin.ClearNavigation(r.Context())
+	if err != nil {
+		writeErr(w, err)
+		return
+	}
+	response.OKMessage(w, stats, "已清空导航数据（链接与分类）")
+}
+
+func (h *AdminHandler) ClearVectors(w http.ResponseWriter, r *http.Request) {
+	stats, err := h.admin.ClearVectors(r.Context())
+	if err != nil {
+		writeErr(w, err)
+		return
+	}
+	response.OKMessage(w, stats, "已清空向量索引")
+}
+
+func (h *AdminHandler) ClearIconFiles(w http.ResponseWriter, r *http.Request) {
+	stats, err := h.admin.ClearIconFiles(r.Context())
+	if err != nil {
+		writeErr(w, err)
+		return
+	}
+	response.OKMessage(w, stats, "已清空站点图标文件")
+}
+
+func (h *AdminHandler) ClearAvatarFiles(w http.ResponseWriter, r *http.Request) {
+	stats, err := h.admin.ClearAvatarFiles(r.Context())
+	if err != nil {
+		writeErr(w, err)
+		return
+	}
+	response.OKMessage(w, stats, "已清空用户头像文件")
+}
+
+func (h *AdminHandler) ClearDeadlinkRecords(w http.ResponseWriter, r *http.Request) {
+	stats, err := h.admin.ClearDeadlinkRecords(r.Context())
+	if err != nil {
+		writeErr(w, err)
+		return
+	}
+	response.OKMessage(w, stats, "已清空死链检测记录")
 }
 
 func (h *AdminHandler) StartDeadlink(w http.ResponseWriter, r *http.Request) {

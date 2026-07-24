@@ -88,6 +88,22 @@ func (r *CategoryRepo) CountChildren(ctx context.Context, parentID int64) (int, 
 	return n, err
 }
 
+func (r *CategoryRepo) Count(ctx context.Context) (int, error) {
+	var n int
+	err := r.db.QueryRowContext(ctx, `SELECT COUNT(1) FROM categories`).Scan(&n)
+	return n, err
+}
+
+// ClearAll removes every category. Call only after websites are gone (or accept SET NULL on website.category_id).
+func (r *CategoryRepo) ClearAll(ctx context.Context) error {
+	// children first so parent_id FK does not block
+	if _, err := r.db.ExecContext(ctx, `DELETE FROM categories WHERE parent_id IS NOT NULL`); err != nil {
+		return err
+	}
+	_, err := r.db.ExecContext(ctx, `DELETE FROM categories`)
+	return err
+}
+
 func (r *CategoryRepo) UpdateOrders(ctx context.Context, ids []int64) error {
 	tx, err := r.db.BeginTx(ctx, nil)
 	if err != nil {

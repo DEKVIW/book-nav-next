@@ -55,6 +55,7 @@ func New(cfg *config.Config) (*App, error) {
 	websiteSvc := service.NewWebsiteService(websites, categories, oplog)
 	categorySvc := service.NewCategoryService(categories, websites)
 	adminSvc := service.NewAdminService(users, invites, websites, categories, oplog, jobs, settingsSvc, cfg.DataDir, dbPath)
+	adminSvc.SetDeadlinkRepo(deadlinks)
 	jobSvc := service.NewJobService(jobs, websites, deadlinks, settingsSvc, cfg.DataDir)
 	// legacy parity: create→icon+vector, update→conditional, delete→clear vector
 	websiteSvc.SetSideEffects(jobSvc)

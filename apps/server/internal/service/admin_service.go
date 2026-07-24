@@ -29,6 +29,7 @@ type AdminService struct {
 	categories *repository.CategoryRepo
 	oplog      *repository.OpLogRepo
 	jobs       *repository.JobRepo
+	deadlinks  *repository.DeadlinkRepo
 	settings   *SettingsService
 	dataDir    string
 	dbPath     string
@@ -48,6 +49,11 @@ func NewAdminService(
 		users: users, invites: invites, websites: websites, categories: categories,
 		oplog: oplog, jobs: jobs, settings: settings, dataDir: dataDir, dbPath: dbPath,
 	}
+}
+
+// SetDeadlinkRepo wires optional deadlink storage for typed cleanup.
+func (s *AdminService) SetDeadlinkRepo(d *repository.DeadlinkRepo) {
+	s.deadlinks = d
 }
 
 func (s *AdminService) DataDir() string { return s.dataDir }
@@ -801,18 +807,173 @@ func copyDir(src, dst string) error {
 	})
 }
 
-func (s *AdminService) ClearWebsites(ctx context.Context) error {
-	if err := s.websites.ClearAll(ctx); err != nil {
-		return err
+// —— Typed data cleanup (each action only touches its own store; no side effects) ——
+
+// CleanupStats returns counts for the data-cleanup UI (per type).
+func (s *AdminService) CleanupStats(ctx context.Context) (map[string]any, error) {
+	sites, _ := s.websites.Count(ctx)
+	cats, _ := s.categories.Count(ctx)
+	logs, _ := s.oplog.Count(ctx)
+	jobsFinished, _ := s.jobs.CountFinished(ctx)
+	deadlinks := 0
+	if s.deadlinks != nil {
+		deadlinks, _ = s.deadlinks.Count(ctx)
 	}
-	// legacy: clear vectors when wiping all sites (best-effort)
+
+	iconFiles, iconBytes := countDirFiles(filepath.Join(s.dataDir, "uploads", "icons"))
+	avatarFiles, avatarBytes := countDirFiles(filepath.Join(s.dataDir, "uploads", "avatars"))
+
+	vectorConfigured := false
+	qdrantURL := ""
 	if s.settings != nil {
 		if cfg, _ := s.settings.VectorConfig(ctx); cfg.QdrantURL != "" {
-			client := vector.NewClient(cfg)
-			_ = client.ClearCollection(ctx)
+			qdrantURL = cfg.QdrantURL
+			vectorConfigured = true
 		}
 	}
-	return nil
+
+	return map[string]any{
+		"websites":          sites,
+		"categories":        cats,
+		"operation_logs":    logs,
+		"jobs_finished":     jobsFinished,
+		"deadlink_records":  deadlinks,
+		"icon_files":        iconFiles,
+		"icon_bytes":        iconBytes,
+		"avatar_files":      avatarFiles,
+		"avatar_bytes":      avatarBytes,
+		"vector_configured": vectorConfigured,
+		"qdrant_url":        qdrantURL,
+	}, nil
+}
+
+// ClearWebsites deletes all website rows only (no vectors, no categories, no files).
+func (s *AdminService) ClearWebsites(ctx context.Context) (map[string]any, error) {
+	n, _ := s.websites.Count(ctx)
+	if err := s.websites.ClearAll(ctx); err != nil {
+		return nil, err
+	}
+	return map[string]any{"deleted": n}, nil
+}
+
+// ClearCategories deletes all categories only when no websites remain.
+func (s *AdminService) ClearCategories(ctx context.Context) (map[string]any, error) {
+	sites, err := s.websites.Count(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if sites > 0 {
+		return nil, apperr.New(apperr.Validation, fmt.Sprintf("仍有 %d 个链接，请先清空链接后再清分类", sites))
+	}
+	n, _ := s.categories.Count(ctx)
+	if err := s.categories.ClearAll(ctx); err != nil {
+		return nil, err
+	}
+	return map[string]any{"deleted": n}, nil
+}
+
+// ClearNavigation explicitly deletes websites then categories (named combo, not a side effect).
+func (s *AdminService) ClearNavigation(ctx context.Context) (map[string]any, error) {
+	sites, _ := s.websites.Count(ctx)
+	cats, _ := s.categories.Count(ctx)
+	if err := s.websites.ClearAll(ctx); err != nil {
+		return nil, err
+	}
+	if err := s.categories.ClearAll(ctx); err != nil {
+		return nil, err
+	}
+	return map[string]any{"websites_deleted": sites, "categories_deleted": cats}, nil
+}
+
+// ClearVectors wipes Qdrant collection only (does not touch SQLite).
+func (s *AdminService) ClearVectors(ctx context.Context) (map[string]any, error) {
+	if s.settings == nil {
+		return nil, apperr.New(apperr.Validation, "设置服务不可用")
+	}
+	cfg, _ := s.settings.VectorConfig(ctx)
+	if cfg.QdrantURL == "" {
+		return nil, apperr.New(apperr.Validation, "未配置 Qdrant 地址")
+	}
+	client := vector.NewClient(cfg)
+	if err := client.ClearCollection(ctx); err != nil {
+		return nil, apperr.Wrap(apperr.Internal, "清空向量索引失败", err)
+	}
+	return map[string]any{"collection": cfg.Collection, "qdrant_url": cfg.QdrantURL}, nil
+}
+
+// ClearIconFiles removes files under data/uploads/icons only (does not change websites.icon).
+func (s *AdminService) ClearIconFiles(ctx context.Context) (map[string]any, error) {
+	dir := filepath.Join(s.dataDir, "uploads", "icons")
+	n, bytes := wipeDirContents(dir)
+	return map[string]any{"files_removed": n, "bytes_freed": bytes}, nil
+}
+
+// ClearAvatarFiles removes files under data/uploads/avatars only (does not change users.avatar).
+func (s *AdminService) ClearAvatarFiles(ctx context.Context) (map[string]any, error) {
+	dir := filepath.Join(s.dataDir, "uploads", "avatars")
+	n, bytes := wipeDirContents(dir)
+	return map[string]any{"files_removed": n, "bytes_freed": bytes}, nil
+}
+
+// ClearDeadlinkRecords deletes deadlink_checks rows only.
+func (s *AdminService) ClearDeadlinkRecords(ctx context.Context) (map[string]any, error) {
+	// wired via optional deadlinks — see AdminService extension below
+	if s.deadlinks == nil {
+		return nil, apperr.New(apperr.Validation, "死链存储不可用")
+	}
+	n, _ := s.deadlinks.Count(ctx)
+	if err := s.deadlinks.ClearAll(ctx); err != nil {
+		return nil, err
+	}
+	return map[string]any{"deleted": n}, nil
+}
+
+func countDirFiles(dir string) (files int, bytes int64) {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return 0, 0
+	}
+	for _, e := range entries {
+		if e.IsDir() {
+			subF, subB := countDirFiles(filepath.Join(dir, e.Name()))
+			files += subF
+			bytes += subB
+			continue
+		}
+		info, err := e.Info()
+		if err != nil {
+			continue
+		}
+		files++
+		bytes += info.Size()
+	}
+	return files, bytes
+}
+
+// wipeDirContents deletes files/subdirs inside dir but keeps the directory itself.
+func wipeDirContents(dir string) (files int, bytes int64) {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return 0, 0
+	}
+	for _, e := range entries {
+		path := filepath.Join(dir, e.Name())
+		if e.IsDir() {
+			f, b := wipeDirContents(path)
+			files += f
+			bytes += b
+			_ = os.Remove(path)
+			continue
+		}
+		info, _ := e.Info()
+		if info != nil {
+			bytes += info.Size()
+		}
+		if err := os.Remove(path); err == nil {
+			files++
+		}
+	}
+	return files, bytes
 }
 
 func randomInviteCode(n int) (string, error) {

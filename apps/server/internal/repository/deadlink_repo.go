@@ -81,3 +81,9 @@ func (r *DeadlinkRepo) ClearAll(ctx context.Context) error {
 	_, err := r.db.ExecContext(ctx, `DELETE FROM deadlink_checks`)
 	return err
 }
+
+func (r *DeadlinkRepo) Count(ctx context.Context) (int, error) {
+	var n int
+	err := r.db.QueryRowContext(ctx, `SELECT COUNT(1) FROM deadlink_checks`).Scan(&n)
+	return n, err
+}

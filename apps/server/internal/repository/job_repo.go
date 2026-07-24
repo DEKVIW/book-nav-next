@@ -122,6 +122,14 @@ func (r *JobRepo) DeleteFinished(ctx context.Context) (int64, error) {
 	return res.RowsAffected()
 }
 
+func (r *JobRepo) CountFinished(ctx context.Context) (int, error) {
+	var n int
+	err := r.db.QueryRowContext(ctx,
+		`SELECT COUNT(1) FROM jobs WHERE status IN ('completed','failed','cancelled')`,
+	).Scan(&n)
+	return n, err
+}
+
 func scanJob(s scannable) (*domain.Job, error) {
 	var j domain.Job
 	var createdBy sql.NullInt64
