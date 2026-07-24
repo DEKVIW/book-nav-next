@@ -9,6 +9,7 @@ import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter, RouterLink } from 'vue-router'
 import { apiDownload, apiGet, apiPost, apiPostForm } from '@/shared/api/client'
 import { useToast } from '@/shared/composables/useToast'
+import AppIcon from '@/shared/ui/AppIcon.vue'
 import AdminTable from '../components/AdminTable.vue'
 
 type TabKey = 'io' | 'cleanup' | 'deadlinks'
@@ -62,8 +63,6 @@ type CleanupAction =
 interface CleanupItem {
   id: CleanupAction
   title: string
-  desc: string
-  keeps: string
   severity: 'warn' | 'danger'
   /** require typing this phrase to confirm (empty = simple confirm) */
   confirmPhrase?: string
@@ -156,128 +155,93 @@ const acting = ref<CleanupAction | null>(null)
 const navItems: CleanupItem[] = [
   {
     id: 'websites',
-    title: '清空全部链接',
-    desc: '删除所有网站链接记录。',
-    keeps: '不影响分类、向量索引、图标文件、日志。',
+    title: '全部链接',
     severity: 'danger',
     endpoint: '/api/v1/admin/data/clear-websites',
     countKey: 'websites',
-    countLabel: (n) => `${n} 条链接`,
+    countLabel: (n) => `${n}`,
   },
   {
     id: 'categories',
-    title: '清空全部分类',
-    desc: '删除全部分类结构（含父子分类）。',
-    keeps: '不影响链接（若仍有链接将拒绝执行）。',
+    title: '全部分类',
     severity: 'warn',
     endpoint: '/api/v1/admin/data/clear-categories',
     countKey: 'categories',
-    countLabel: (n) => `${n} 个分类`,
-    disabled: (s) =>
-      s.websites > 0 ? `仍有 ${s.websites} 条链接，请先清空链接` : null,
+    countLabel: (n) => `${n}`,
+    disabled: (s) => (s.websites > 0 ? `仍有 ${s.websites} 条链接` : null),
   },
   {
     id: 'navigation',
-    title: '清空导航数据',
-    desc: '同时删除全部链接与全部分类，使导航归零。',
-    keeps: '不影响向量、图标文件、用户与站点设置。',
+    title: '链接 + 分类',
     severity: 'danger',
     confirmPhrase: '清空导航',
     endpoint: '/api/v1/admin/data/clear-navigation',
-    countLabel: (_n, s) => `${s.websites} 链接 · ${s.categories} 分类`,
+    countLabel: (_n, s) => `${s.websites} / ${s.categories}`,
   },
 ]
 
 const searchItems: CleanupItem[] = [
   {
     id: 'vectors',
-    title: '清空向量索引',
-    desc: '删除 Qdrant 中的网站向量集合（用于 AI / 语义搜索）。',
-    keeps: '不影响数据库中的链接与分类；之后可重新建索引。',
+    title: '向量索引',
     severity: 'warn',
     endpoint: '/api/v1/admin/data/clear-vectors',
     countLabel: (_n, s) => (s.vector_configured ? '已配置' : '未配置'),
-    disabled: (s) => (!s.vector_configured ? '未配置 Qdrant，无需清理' : null),
+    disabled: (s) => (!s.vector_configured ? '未配置 Qdrant' : null),
   },
 ]
 
 const mediaItems: CleanupItem[] = [
   {
     id: 'icon-files',
-    title: '清空站点图标文件',
-    desc: '删除 data/uploads/icons 下已下载的图标文件。',
-    keeps: '不修改链接的 icon 字段；前台可能出现图标失效直至重新抓取。',
+    title: '站点图标',
     severity: 'warn',
     endpoint: '/api/v1/admin/data/clear-icon-files',
     countKey: 'icon_files',
-    countLabel: (n, s) => `${n} 个文件 · ${formatBytes(s.icon_bytes)}`,
+    countLabel: (n, s) => `${n} · ${formatBytes(s.icon_bytes)}`,
   },
   {
     id: 'avatar-files',
-    title: '清空用户头像文件',
-    desc: '删除 data/uploads/avatars 下的头像文件。',
-    keeps: '不修改用户 avatar 字段。',
+    title: '用户头像',
     severity: 'warn',
     endpoint: '/api/v1/admin/data/clear-avatar-files',
     countKey: 'avatar_files',
-    countLabel: (n, s) => `${n} 个文件 · ${formatBytes(s.avatar_bytes)}`,
+    countLabel: (n, s) => `${n} · ${formatBytes(s.avatar_bytes)}`,
   },
 ]
 
 const opsItems: CleanupItem[] = [
   {
     id: 'logs',
-    title: '清空操作日志',
-    desc: '删除全部操作审计记录。',
-    keeps: '不影响链接与分类数据。',
+    title: '操作日志',
     severity: 'warn',
     endpoint: '/api/v1/admin/operation-logs/clear',
     countKey: 'operation_logs',
-    countLabel: (n) => `${n} 条`,
+    countLabel: (n) => `${n}`,
   },
   {
     id: 'jobs',
-    title: '清空已完成任务',
-    desc: '删除状态为已完成 / 失败 / 已取消的任务记录。',
-    keeps: '进行中的任务不会被删除。',
+    title: '已完成任务',
     severity: 'warn',
     endpoint: '/api/v1/admin/jobs/clear',
     countKey: 'jobs_finished',
-    countLabel: (n) => `${n} 条`,
+    countLabel: (n) => `${n}`,
   },
   {
     id: 'deadlinks',
-    title: '清空死链检测记录',
-    desc: '删除历史死链检测结果。',
-    keeps: '不影响链接本身与 is_valid 标记。',
+    title: '死链记录',
     severity: 'warn',
     endpoint: '/api/v1/admin/data/clear-deadlinks',
     countKey: 'deadlink_records',
-    countLabel: (n) => `${n} 条`,
+    countLabel: (n) => `${n}`,
   },
 ]
 
-const sections: { title: string; hint: string; items: CleanupItem[] }[] = [
-  {
-    title: '导航数据',
-    hint: '前台分类与链接。每项只删除自身范围。',
-    items: navItems,
-  },
-  {
-    title: '搜索索引',
-    hint: '外部向量库，与 SQLite 相互独立。',
-    items: searchItems,
-  },
-  {
-    title: '媒体文件',
-    hint: '仅删除磁盘文件，不改数据库字段。',
-    items: mediaItems,
-  },
-  {
-    title: '运维记录',
-    hint: '日志与任务历史，不影响业务内容。',
-    items: opsItems,
-  },
+const sections: { title: string; items: CleanupItem[] }[] = [
+  { title: '导航数据', items: navItems },
+  { title: '搜索索引', items: searchItems },
+  { title: '媒体文件', items: mediaItems },
+  { title: '运维记录', items: opsItems },
 ]
 
 // confirm dialog state
@@ -351,7 +315,7 @@ async function confirmCleanup() {
   acting.value = item.id
   try {
     await apiPost(item.endpoint)
-    toast.success(item.title.replace(/^清空/, '已清空') || '清理完成')
+    toast.success(`已清理${item.title}`)
     dialogOpen.value = false
     dialogItem.value = null
     dialogPhrase.value = ''
@@ -372,9 +336,8 @@ const loadingResults = ref(false)
 const polling = ref(false)
 
 async function loadJobs() {
-  jobs.value = ((await apiGet('/api/v1/admin/jobs')) || []).filter(
-    (j: Job) => j.type === 'deadlink_check',
-  )
+  const list = (await apiGet<Job[]>('/api/v1/admin/jobs')) || []
+  jobs.value = list.filter((j) => j.type === 'deadlink_check')
   const last = jobs.value[0]
   if (last?.result_json) {
     try {
@@ -465,174 +428,171 @@ watch(tab, (t) => {
       </div>
     </header>
 
-    <div class="c-tabs" role="tablist">
-      <button
-        v-for="t in tabs"
-        :key="t.key"
-        type="button"
-        class="c-tabs__item"
-        :class="{ active: tab === t.key }"
-        @click="setTab(t.key)"
-      >
-        {{ t.label }}
-      </button>
-    </div>
-
-    <!-- IO -->
-    <section v-show="tab === 'io'" class="c-card c-card__body">
-      <h3 class="c-card__title">导出</h3>
-      <div class="form-row">
-        <button type="button" class="c-btn c-btn--primary" :disabled="exporting" @click="doExport">
-          {{ exporting ? '导出中…' : '导出数据库 (.db3)' }}
-        </button>
-      </div>
-
-      <h3 class="c-card__title" style="margin-top: 22px">导入</h3>
-      <div class="form-row">
-        <input
-          ref="fileInput"
-          type="file"
-          class="c-input file-input"
-          accept=".db,.db3,.sqlite,.sqlite3"
-          @change="onPickFile"
-        />
-        <select v-model="importMode" class="c-input" style="max-width: 140px">
-          <option value="merge">合并</option>
-          <option value="replace">替换</option>
-        </select>
-        <button type="button" class="c-btn c-btn--primary" :disabled="importing" @click="doImport">
-          {{ importing ? '导入中…' : '开始导入' }}
-        </button>
-      </div>
-      <p v-if="importFile" class="file-name mono">{{ importFile.name }}</p>
-    </section>
-
-    <!-- Cleanup: GitHub-style Danger Zone -->
-    <section v-show="tab === 'cleanup'" class="cleanup">
-      <div class="cleanup-banner">
-        <div class="cleanup-banner__text">
-          <strong>按类型清理</strong>
-          <span>每一项只删除自身数据，不会顺带清理其它类型。操作不可恢复，建议先备份。</span>
-        </div>
+    <div class="tab-layout">
+      <div class="c-tabs" role="tablist">
         <button
+          v-for="t in tabs"
+          :key="t.key"
           type="button"
-          class="c-btn c-btn--ghost c-btn--sm"
-          :disabled="statsLoading"
-          @click="loadCleanupStats"
+          class="c-tabs__item"
+          :class="{ active: tab === t.key }"
+          @click="setTab(t.key)"
         >
-          {{ statsLoading ? '刷新中…' : '刷新统计' }}
+          {{ t.label }}
         </button>
       </div>
 
-      <div class="cleanup-grid">
-        <div v-for="sec in sections" :key="sec.title" class="dz-section">
-          <div class="dz-section__head">
-            <h3 class="dz-section__title">{{ sec.title }}</h3>
-            <p class="dz-section__hint">{{ sec.hint }}</p>
+      <!-- 单一内容容器：保证 Tab → 面板间距在三个页签下完全一致 -->
+      <section class="c-card c-card__body tab-panel">
+        <!-- IO -->
+        <div v-show="tab === 'io'">
+          <div class="panel-head">
+            <h3 class="c-card__title panel-title">导入导出</h3>
           </div>
-          <ul class="dz-list">
-            <li v-for="item in sec.items" :key="item.id" class="dz-row">
-              <div class="dz-row__body">
-                <div class="dz-row__title-line">
-                  <span class="dz-row__title">{{ item.title }}</span>
-                  <span class="dz-count">{{ itemCountText(item) }}</span>
-                </div>
-                <p class="dz-row__desc">{{ item.desc }}</p>
-                <p class="dz-row__keeps">{{ item.keeps }}</p>
-                <p v-if="itemDisabledReason(item)" class="dz-row__block">
-                  {{ itemDisabledReason(item) }}
-                </p>
-              </div>
-              <div class="dz-row__action">
-                <button
-                  type="button"
-                  class="c-btn c-btn--sm"
-                  :class="item.severity === 'danger' ? 'c-btn--danger' : 'c-btn--ghost'"
-                  :disabled="!!itemDisabledReason(item) || acting === item.id"
-                  @click="openCleanup(item)"
-                >
-                  {{ acting === item.id ? '处理中…' : '清理' }}
-                </button>
-              </div>
-            </li>
-          </ul>
-        </div>
-      </div>
-    </section>
-
-    <!-- Deadlinks -->
-    <template v-if="tab === 'deadlinks'">
-      <section class="c-card c-card__body">
-        <div class="dead-head">
-          <h3 class="c-card__title" style="margin-bottom: 0">死链检测</h3>
+          <h3 class="c-card__title c-card__title--sub">导出</h3>
           <div class="form-row">
+            <button type="button" class="c-btn c-btn--primary" :disabled="exporting" @click="doExport">
+              {{ exporting ? '导出中…' : '导出数据库 (.db3)' }}
+            </button>
+          </div>
+
+          <h3 class="c-card__title c-card__title--sub" style="margin-top: 18px">导入</h3>
+          <div class="form-row">
+            <input
+              ref="fileInput"
+              type="file"
+              class="c-input file-input"
+              accept=".db,.db3,.sqlite,.sqlite3"
+              @change="onPickFile"
+            />
+            <select v-model="importMode" class="c-input" style="max-width: 140px">
+              <option value="merge">合并</option>
+              <option value="replace">替换</option>
+            </select>
+            <button type="button" class="c-btn c-btn--primary" :disabled="importing" @click="doImport">
+              {{ importing ? '导入中…' : '开始导入' }}
+            </button>
+          </div>
+          <p v-if="importFile" class="file-name mono">{{ importFile.name }}</p>
+        </div>
+
+        <!-- Cleanup -->
+        <div v-show="tab === 'cleanup'">
+          <div class="panel-head">
+            <h3 class="c-card__title panel-title">数据清理</h3>
             <button
               type="button"
               class="c-btn c-btn--ghost c-btn--sm"
-              :disabled="!batchId"
-              @click="loadResults"
+              :disabled="statsLoading"
+              @click="loadCleanupStats"
             >
-              刷新失效列表
+              {{ statsLoading ? '…' : '刷新' }}
             </button>
-            <button type="button" class="c-btn c-btn--primary" :disabled="polling" @click="startDeadlink">
-              {{ polling ? '检测中…' : '开始检测' }}
-            </button>
+          </div>
+
+          <div class="cleanup">
+            <div v-for="sec in sections" :key="sec.title" class="dz-module">
+              <div class="dz-module__label">{{ sec.title }}</div>
+              <div class="dz-chips">
+                <div
+                  v-for="item in sec.items"
+                  :key="item.id"
+                  class="dz-chip"
+                  :class="{
+                    'dz-chip--danger': item.severity === 'danger',
+                    'dz-chip--disabled': !!itemDisabledReason(item),
+                  }"
+                  :title="itemDisabledReason(item) || item.title"
+                >
+                  <span class="dz-chip__name">{{ item.title }}</span>
+                  <span class="dz-chip__count">{{ itemCountText(item) }}</span>
+                  <button
+                    type="button"
+                    class="dz-chip__btn"
+                    :disabled="!!itemDisabledReason(item) || acting === item.id"
+                    :aria-label="`清理${item.title}`"
+                    @click="openCleanup(item)"
+                  >
+                    <AppIcon name="trash-2" :size="15" />
+                  </button>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
 
-        <div v-if="jobs.length" class="job-list">
-          <div v-for="j in jobs.slice(0, 5)" :key="j.id" class="job-line">
-            <span class="mono">#{{ j.id }}</span>
-            <span class="c-tag">{{ j.status }}</span>
-            <span class="mono">{{ j.progress }}/{{ j.total }}</span>
-            <span class="mono">ok {{ j.success }} / fail {{ j.failed }}</span>
+        <!-- Deadlinks -->
+        <div v-show="tab === 'deadlinks'">
+          <div class="panel-head">
+            <h3 class="c-card__title panel-title">死链检测</h3>
+            <div class="form-row">
+              <button
+                type="button"
+                class="c-btn c-btn--ghost c-btn--sm"
+                :disabled="!batchId"
+                @click="loadResults"
+              >
+                刷新失效列表
+              </button>
+              <button type="button" class="c-btn c-btn--primary" :disabled="polling" @click="startDeadlink">
+                {{ polling ? '检测中…' : '开始检测' }}
+              </button>
+            </div>
+          </div>
+
+          <div v-if="jobs.length" class="job-list">
+            <div v-for="j in jobs.slice(0, 5)" :key="j.id" class="job-line">
+              <span class="mono">#{{ j.id }}</span>
+              <span class="c-tag">{{ j.status }}</span>
+              <span class="mono">{{ j.progress }}/{{ j.total }}</span>
+              <span class="mono">ok {{ j.success }} / fail {{ j.failed }}</span>
+            </div>
+          </div>
+
+          <div class="dead-table-wrap">
+            <AdminTable
+              :loading="loadingResults"
+              :is-empty="!results.length"
+              empty="暂无失效链接（先运行检测）"
+            >
+              <template #head>
+                <tr>
+                  <th>标题</th>
+                  <th>URL</th>
+                  <th style="width: 88px">状态码</th>
+                  <th style="width: 120px">错误</th>
+                </tr>
+              </template>
+              <tr v-for="r in results" :key="r.id">
+                <td>
+                  <div class="c-cell-title" :title="r.website_title">{{ r.website_title || '—' }}</div>
+                </td>
+                <td>
+                  <div class="c-cell-ellipsis" :title="r.url">{{ r.url }}</div>
+                </td>
+                <td class="mono">{{ r.status_code ?? '—' }}</td>
+                <td>
+                  <div class="c-cell-ellipsis">{{ r.error_type || '—' }}</div>
+                </td>
+              </tr>
+            </AdminTable>
           </div>
         </div>
       </section>
-
-      <AdminTable
-        :loading="loadingResults"
-        :is-empty="!results.length"
-        empty="暂无失效链接（先运行检测）"
-      >
-        <template #head>
-          <tr>
-            <th>标题</th>
-            <th>URL</th>
-            <th style="width: 88px">状态码</th>
-            <th style="width: 120px">错误</th>
-          </tr>
-        </template>
-        <tr v-for="r in results" :key="r.id">
-          <td>
-            <div class="c-cell-title" :title="r.website_title">{{ r.website_title || '—' }}</div>
-          </td>
-          <td>
-            <div class="c-cell-ellipsis" :title="r.url">{{ r.url }}</div>
-          </td>
-          <td class="mono">{{ r.status_code ?? '—' }}</td>
-          <td>
-            <div class="c-cell-ellipsis">{{ r.error_type || '—' }}</div>
-          </td>
-        </tr>
-      </AdminTable>
-    </template>
+    </div>
 
     <!-- Confirm modal -->
     <Teleport to="body">
       <div v-if="dialogOpen && dialogItem" class="dz-modal-root" role="dialog" aria-modal="true">
         <div class="dz-modal-backdrop" @click="closeDialog" />
         <div class="dz-modal">
-          <h3 class="dz-modal__title">{{ dialogItem.title }}</h3>
-          <p class="dz-modal__desc">{{ dialogItem.desc }}</p>
-          <p class="dz-modal__keeps">{{ dialogItem.keeps }}</p>
-          <p class="dz-modal__count">当前：{{ itemCountText(dialogItem) }}</p>
+          <h3 class="dz-modal__title">清理{{ dialogItem.title }}</h3>
+          <p class="dz-modal__count">{{ itemCountText(dialogItem) }}</p>
 
           <div v-if="dialogItem.confirmPhrase" class="dz-modal__phrase">
             <label>
-              请输入
+              输入
               <code>{{ dialogItem.confirmPhrase }}</code>
-              以确认
               <input
                 v-model="dialogPhrase"
                 class="c-input"
@@ -643,7 +603,7 @@ watch(tab, (t) => {
               />
             </label>
           </div>
-          <p v-else class="dz-modal__warn">此操作不可恢复，确定继续？</p>
+          <p v-else class="dz-modal__warn">不可恢复，确认清理？</p>
 
           <div class="dz-modal__actions">
             <button type="button" class="c-btn c-btn--ghost" :disabled="dialogBusy" @click="closeDialog">
@@ -655,7 +615,7 @@ watch(tab, (t) => {
               :disabled="!dialogCanSubmit || dialogBusy"
               @click="confirmCleanup"
             >
-              {{ dialogBusy ? '处理中…' : '确认清理' }}
+              {{ dialogBusy ? '…' : '确认' }}
             </button>
           </div>
         </div>
@@ -684,150 +644,136 @@ watch(tab, (t) => {
   font-family: var(--console-mono, ui-monospace, monospace);
 }
 
-/* —— Cleanup / Danger Zone (GitHub-like) —— */
+/* Tab → 单一面板：间距固定，不随页签变化 */
+.tab-layout {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 100%;
+  min-width: 0;
+}
+.tab-panel {
+  margin: 0;
+}
+
+/* Shared panel header (aligned across tabs) */
+.panel-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin: 0 0 14px;
+  min-height: 32px;
+}
+.panel-title {
+  margin: 0 !important;
+}
+.c-card__title--sub {
+  margin: 0 0 10px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--console-text-2);
+}
+
+/* —— Cleanup: compact adaptive chips inside card —— */
 .cleanup {
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 16px;
 }
-.cleanup-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 14px;
-  align-items: start;
-}
-@media (max-width: 960px) {
-  .cleanup-grid {
-    grid-template-columns: 1fr;
-  }
-}
-.cleanup-banner {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 12px 14px;
-  border-radius: var(--console-radius);
-  border: 1px solid rgba(239, 68, 68, 0.22);
-  background: rgba(239, 68, 68, 0.06);
-}
-.cleanup-banner__text {
+
+.dz-module {
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  font-size: 13px;
-  color: var(--console-text-2);
-  line-height: 1.45;
-  max-width: 640px;
+  gap: 8px;
 }
-.cleanup-banner__text strong {
-  color: #fca5a5;
-  font-size: 13px;
-  font-weight: 600;
-}
-
-.dz-section {
-  border: 1px solid var(--console-border);
-  border-radius: var(--console-radius);
-  background: var(--console-surface);
-  overflow: hidden;
-}
-.dz-section__head {
-  padding: 14px 16px 10px;
-  border-bottom: 1px solid var(--console-border);
-}
-.dz-section__title {
-  margin: 0;
-  font-size: 14px;
-  font-weight: 650;
-  color: var(--console-text);
-}
-.dz-section__hint {
-  margin: 4px 0 0;
+.dz-module__label {
   font-size: 12px;
+  font-weight: 600;
   color: var(--console-text-3);
-  line-height: 1.4;
+  letter-spacing: 0.02em;
+  padding-left: 2px;
 }
 
-.dz-list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-}
-.dz-row {
+/* chips wrap — adaptive columns via flex-wrap */
+.dz-chips {
   display: flex;
   flex-wrap: wrap;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 10px 12px;
-  padding: 12px 14px;
-  border-bottom: 1px solid var(--console-border);
+  gap: 8px;
 }
-.dz-row:last-child {
-  border-bottom: 0;
-}
-.dz-row__body {
-  flex: 1 1 160px;
-  min-width: 0;
-}
-.dz-row__title-line {
-  display: flex;
-  flex-wrap: wrap;
+
+.dz-chip {
+  display: inline-flex;
   align-items: center;
   gap: 8px;
-  margin-bottom: 4px;
+  min-height: 36px;
+  padding: 4px 4px 4px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--console-border);
+  background: var(--console-surface);
+  transition: border-color 0.15s, background 0.15s;
 }
-.dz-row__title {
+.dz-chip:hover:not(.dz-chip--disabled) {
+  border-color: rgba(148, 163, 184, 0.35);
+  background: rgba(255, 255, 255, 0.02);
+}
+.dz-chip--danger {
+  border-color: rgba(239, 68, 68, 0.22);
+}
+.dz-chip--disabled {
+  opacity: 0.55;
+}
+.dz-chip__name {
   font-size: 13px;
-  font-weight: 600;
+  font-weight: 500;
   color: var(--console-text);
+  white-space: nowrap;
 }
-.dz-count {
+.dz-chip__count {
   font-size: 11px;
   font-family: var(--console-mono, ui-monospace, monospace);
   color: var(--console-text-3);
-  padding: 2px 8px;
+  padding: 2px 7px;
   border-radius: 999px;
+  background: rgba(0, 0, 0, 0.25);
   border: 1px solid var(--console-border);
-  background: rgba(0, 0, 0, 0.2);
+  white-space: nowrap;
 }
-.dz-row__desc {
-  margin: 0 0 4px;
-  font-size: 12px;
-  color: var(--console-text-2);
-  line-height: 1.45;
-}
-.dz-row__keeps {
+.dz-chip__btn {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
   margin: 0;
-  font-size: 11px;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
   color: var(--console-text-3);
-  line-height: 1.4;
+  cursor: pointer;
+  transition: color 0.15s, background 0.15s;
 }
-.dz-row__block {
-  margin: 6px 0 0;
-  font-size: 12px;
-  color: #fbbf24;
+.dz-chip__btn:hover:not(:disabled) {
+  color: #fca5a5;
+  background: rgba(239, 68, 68, 0.12);
 }
-.dz-row__action {
-  flex: 0 0 auto;
-  display: flex;
-  align-items: center;
+.dz-chip__btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.dz-chip--danger .dz-chip__btn {
+  color: #f87171;
 }
 
-.dead-head {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 12px;
-}
 .job-list {
   display: flex;
   flex-direction: column;
   gap: 2px;
-  margin-top: 8px;
+  margin: 0 0 14px;
+}
+.dead-table-wrap {
+  margin-top: 4px;
 }
 .job-line {
   display: flex;
@@ -860,34 +806,23 @@ watch(tab, (t) => {
 }
 .dz-modal {
   position: relative;
-  width: min(420px, 100%);
-  padding: 20px;
+  width: min(360px, 100%);
+  padding: 18px;
   border-radius: var(--console-radius);
   border: 1px solid var(--console-border);
   background: #12171f;
   box-shadow: 0 16px 48px rgba(0, 0, 0, 0.45);
 }
 .dz-modal__title {
-  margin: 0 0 8px;
-  font-size: 16px;
+  margin: 0 0 6px;
+  font-size: 15px;
   font-weight: 650;
 }
-.dz-modal__desc,
-.dz-modal__keeps,
-.dz-modal__count,
-.dz-modal__warn {
-  margin: 0 0 8px;
-  font-size: 13px;
-  color: var(--console-text-2);
-  line-height: 1.45;
-}
-.dz-modal__keeps {
-  font-size: 12px;
-  color: var(--console-text-3);
-}
 .dz-modal__count {
+  margin: 0 0 12px;
   font-family: var(--console-mono, ui-monospace, monospace);
   font-size: 12px;
+  color: var(--console-text-3);
 }
 .dz-modal__phrase label {
   display: grid;
@@ -903,12 +838,14 @@ watch(tab, (t) => {
   background: rgba(239, 68, 68, 0.12);
 }
 .dz-modal__warn {
-  color: #fbbf24;
+  margin: 0 0 8px;
+  font-size: 13px;
+  color: var(--console-text-2);
 }
 .dz-modal__actions {
   display: flex;
   justify-content: flex-end;
   gap: 8px;
-  margin-top: 16px;
+  margin-top: 14px;
 }
 </style>

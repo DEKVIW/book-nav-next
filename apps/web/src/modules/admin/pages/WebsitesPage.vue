@@ -141,7 +141,7 @@ onMounted(async () => {
 </script>
 
 <template>
-  <div>
+  <div class="admin-page">
     <header class="page-header">
       <h1>链接管理</h1>
       <div class="page-header__actions">
@@ -166,7 +166,7 @@ onMounted(async () => {
       </button>
     </div>
 
-    <div v-if="showForm" class="c-card c-card__body" style="margin-bottom: 14px">
+    <div v-if="showForm" class="c-card c-card__body">
       <h3 class="c-card__title">{{ editingId ? '编辑链接' : '添加链接' }}</h3>
       <div class="c-form-2">
         <label>标题 <input v-model="form.title" class="c-input" placeholder="网站标题" /></label>

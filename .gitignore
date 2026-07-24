@@ -50,3 +50,9 @@ apps/server/vendor/
 *.tmp
 *.bak
 apps/web/public/mecha/raw/
+
+# Personal deploy helpers (local only, never commit)
+deploy/push-hub.sh
+deploy/remote-up.sh
+deploy/_*.sh
+

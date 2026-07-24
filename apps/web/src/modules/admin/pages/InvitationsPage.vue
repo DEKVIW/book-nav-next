@@ -58,7 +58,7 @@ onMounted(load)
 </script>
 
 <template>
-  <div>
+  <div class="admin-page">
     <header class="page-header">
       <h1>邀请码</h1>
       <div class="page-header__actions">

@@ -465,11 +465,7 @@ onMounted(() => {
 </template>
 
 <style scoped>
-.settings-layout {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
+/* tab → panel gap 由全局 .settings-layout (10px) 统一 */
 .panel-card {
   margin: 0;
   display: flex;

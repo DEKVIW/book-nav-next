@@ -622,7 +622,7 @@ select.c-input {
   max-width: 200px;
 }
 
-/* Module tabs — 统一高度与下间距，避免切换跳动 */
+/* Module tabs — 统一高度；与下方面板间距由 .tab-layout / .settings-layout 控制 */
 .c-tabs {
   display: flex;
   flex-wrap: wrap;
@@ -633,6 +633,26 @@ select.c-input {
   border: 1px solid var(--console-border);
   background: var(--console-surface);
   flex-shrink: 0;
+}
+
+/* Tab 导航 → 内容区固定 10px（单一面板，避免多 v-show 节点影响 flex gap） */
+.tab-layout,
+.settings-layout {
+  display: flex;
+  flex-direction: column;
+  gap: 10px !important;
+  width: 100%;
+  min-width: 0;
+}
+.settings-panel {
+  width: 100%;
+  min-width: 0;
+  margin: 0;
+}
+.settings-panel > .c-card,
+.settings-panel > .c-card__body,
+.settings-panel > .panel-card {
+  margin-top: 0;
 }
 .c-tabs__item {
   height: 36px;

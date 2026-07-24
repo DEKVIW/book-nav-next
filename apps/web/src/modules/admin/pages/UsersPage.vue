@@ -179,7 +179,7 @@ onMounted(load)
 </script>
 
 <template>
-  <div>
+  <div class="admin-page">
     <header class="page-header">
       <h1>用户管理</h1>
     </header>
@@ -323,7 +323,7 @@ onMounted(load)
 
 <style scoped>
 .user-edit {
-  margin-bottom: 14px;
+  margin: 0;
 }
 .user-edit__head {
   display: flex;

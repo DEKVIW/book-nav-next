@@ -924,18 +924,7 @@ onMounted(() => {
   border-radius: 4px;
   background: rgba(255, 255, 255, 0.06);
 }
-/* 固定 Tab + 面板间距，切换时不再跳动 */
-.settings-layout {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-  width: 100%;
-  min-width: 0;
-}
-.settings-panel {
-  width: 100%;
-  min-width: 0;
-}
+/* tab → panel gap 由全局 .settings-layout (10px) 统一 */
 .panel-card {
   margin: 0;
 }
