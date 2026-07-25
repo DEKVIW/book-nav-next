@@ -547,22 +547,59 @@ function scrollTop() {
     <template v-else-if="!portal.loading || portal.categories.length">
       <!-- 搜索结果 -->
       <section v-if="portal.searchResults" class="search-layer">
-        <header class="bay-header">
-          <span class="bay-header__icon bay-header__icon--magenta">
-            <AppIcon name="search" :size="18" />
-          </span>
-          <h2 class="bay-header__title">搜索结果</h2>
-          <span class="bay-header__meta">
-            {{ portal.searchQuery }} · {{ portal.searchResults.length }} 条
-            <template v-if="portal.searchMeta?.mode"> · {{ portal.searchMeta.mode }}</template>
-            <template v-if="portal.searchLoading"> · 优化中…</template>
-            <template v-else-if="portal.searchMeta?.refined"> · 已精排</template>
-            <template v-else-if="useAI && aiAvailable"> · AI</template>
-          </span>
-          <p v-if="portal.searchMeta?.summary" class="search-summary">{{ portal.searchMeta.summary }}</p>
-          <button type="button" class="m-btn m-btn--ghost" @click="portal.clearSearch()">返回导航</button>
+        <header class="search-head">
+          <div class="search-head__main">
+            <span class="bay-header__icon bay-header__icon--magenta" aria-hidden="true">
+              <AppIcon name="search" :size="18" />
+            </span>
+            <div class="search-head__copy">
+              <div class="search-head__title-row">
+                <h2 class="search-head__title">搜索结果</h2>
+                <div class="search-head__chips" aria-label="搜索状态">
+                  <span class="search-chip search-chip--query" :title="portal.searchQuery">
+                    {{ portal.searchQuery }}
+                  </span>
+                  <span class="search-chip">{{ portal.searchResults.length }} 条</span>
+                  <span v-if="portal.searchMeta?.mode" class="search-chip search-chip--mode">
+                    {{ portal.searchMeta.mode }}
+                  </span>
+                  <span
+                    v-if="portal.searchLoading"
+                    class="search-chip search-chip--live"
+                  >优化中</span>
+                  <span
+                    v-else-if="portal.searchMeta?.refined"
+                    class="search-chip search-chip--ok"
+                  >已精排</span>
+                  <span
+                    v-else-if="useAI && aiAvailable && portal.searchMeta?.ai"
+                    class="search-chip search-chip--ai"
+                  >AI</span>
+                </div>
+              </div>
+              <p v-if="portal.searchMeta?.summary" class="search-head__summary">
+                {{ portal.searchMeta.summary }}
+              </p>
+              <p
+                v-else-if="portal.searchLoading"
+                class="search-head__summary search-head__summary--muted"
+              >
+                正在融合检索结果，稍后可能精排…
+              </p>
+            </div>
+            <button
+              type="button"
+              class="m-btn m-btn--ghost search-head__back"
+              @click="portal.clearSearch()"
+            >
+              返回导航
+            </button>
+          </div>
         </header>
-        <div v-if="!portal.searchResults.length" class="state">没有匹配的链接</div>
+        <div v-if="!portal.searchResults.length && portal.searchLoading" class="state">
+          正在搜索…
+        </div>
+        <div v-else-if="!portal.searchResults.length" class="state">没有匹配的链接</div>
         <div v-else class="card-grid">
           <SiteCard
             v-for="site in portal.searchResults"
@@ -721,13 +758,125 @@ function scrollTop() {
 </template>
 
 <style scoped>
-.search-summary {
-  margin: 8px 0 0;
-  width: 100%;
-  flex-basis: 100%;
-  font-size: 12px;
+/* Search result bay — structured header (not a single jammed flex row) */
+.search-layer {
+  margin-bottom: 36px;
+}
+.search-head {
+  margin-bottom: var(--space-4);
+}
+.search-head__main {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  min-height: 36px;
+}
+.search-head__copy {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.search-head__title-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+}
+.search-head__title {
+  margin: 0;
+  font-size: var(--text-lg);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--text-primary);
+  flex-shrink: 0;
+}
+.search-head__chips {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.search-chip {
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+  height: 22px;
+  padding: 0 8px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1;
   color: var(--text-muted);
-  line-height: 1.45;
+  border: 1px solid var(--stroke-dim);
+  background: rgba(8, 16, 28, 0.45);
+  clip-path: polygon(4px 0, 100% 0, 100% calc(100% - 4px), calc(100% - 4px) 100%, 0 100%, 0 4px);
+  white-space: nowrap;
+}
+.search-chip--query {
+  max-width: min(42vw, 280px);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--text-secondary);
+  border-color: color-mix(in srgb, var(--magenta) 28%, var(--stroke-dim));
+}
+.search-chip--mode {
+  text-transform: lowercase;
+  color: var(--energy);
+  border-color: color-mix(in srgb, var(--energy) 30%, var(--stroke-dim));
+}
+.search-chip--live {
+  color: var(--amber);
+  border-color: color-mix(in srgb, var(--amber) 40%, var(--stroke-dim));
+  box-shadow: 0 0 10px rgba(255, 176, 32, 0.12);
+  animation: search-chip-pulse 1.2s ease-in-out infinite;
+}
+.search-chip--ok {
+  color: var(--energy);
+  border-color: color-mix(in srgb, var(--energy) 35%, var(--stroke-dim));
+}
+.search-chip--ai {
+  color: var(--magenta);
+  border-color: color-mix(in srgb, var(--magenta) 35%, var(--stroke-dim));
+}
+.search-head__summary {
+  margin: 0;
+  max-width: 72ch;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-secondary);
+  padding-left: 2px;
+  border-left: 2px solid color-mix(in srgb, var(--magenta) 45%, transparent);
+  padding-left: 10px;
+}
+.search-head__summary--muted {
+  color: var(--text-muted);
+  border-left-color: var(--stroke-dim);
+  font-style: normal;
+}
+.search-head__back {
+  flex-shrink: 0;
+  margin-left: auto;
+  align-self: flex-start;
+  height: 34px !important;
+  letter-spacing: 0.04em;
+}
+@keyframes search-chip-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.72; }
+}
+@media (max-width: 720px) {
+  .search-head__main {
+    flex-wrap: wrap;
+  }
+  .search-head__back {
+    margin-left: 0;
+    width: 100%;
+  }
+  .search-chip--query {
+    max-width: min(70vw, 220px);
+  }
 }
 
 .state {
