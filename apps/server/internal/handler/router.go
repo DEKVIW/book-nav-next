@@ -75,6 +75,7 @@ func NewRouter(d Deps) http.Handler {
 	mediaDir := filepath.Join(cfg.DataDir, "uploads")
 	_ = os.MkdirAll(filepath.Join(mediaDir, "icons"), 0o755)
 	_ = os.MkdirAll(filepath.Join(mediaDir, "avatars"), 0o755)
+	_ = os.MkdirAll(filepath.Join(mediaDir, "branding"), 0o755)
 	r.Handle("/media/*", http.StripPrefix("/media/", http.FileServer(http.Dir(mediaDir))))
 
 	authH := NewAuthHandler(d.Auth, cfg.CookieSecureMode())
@@ -160,6 +161,7 @@ func NewRouter(d Deps) http.Handler {
 				sr.Delete("/users/{id}", adminH.DeleteUser)
 				sr.Get("/settings/{namespace}", adminH.GetSettings)
 				sr.Put("/settings/{namespace}", adminH.PutSettings)
+				sr.Post("/settings/upload", adminH.UploadSiteAsset)
 				sr.Get("/export", adminH.Export)
 				sr.Get("/export/json", adminH.ExportJSON)
 				sr.Get("/export/config", adminH.ExportConfig)

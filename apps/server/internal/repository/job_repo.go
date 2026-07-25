@@ -53,7 +53,8 @@ FROM jobs ORDER BY id DESC LIMIT ?`, limit)
 		return nil, err
 	}
 	defer rows.Close()
-	var out []domain.Job
+	// non-nil empty slice → JSON "[]" not null (frontend treats null as empty list)
+	out := make([]domain.Job, 0)
 	for rows.Next() {
 		j, err := scanJob(rows)
 		if err != nil {

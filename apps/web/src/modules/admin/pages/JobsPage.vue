@@ -1,9 +1,10 @@
 <script setup lang="ts">
 /**
  * 任务中心：进度监控 / 停止 / 删除
- * 同类型任务后端禁止并发；启动在业务页
+ * 3s 轮询足够展示进度，无需 SSE/WebSocket。
+ * 轮询必须 quiet：禁止整表 loading，失败保留旧数据。
  */
-import { onMounted, onUnmounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { RouterLink } from 'vue-router'
 import { apiDelete, apiGet, apiPost } from '@/shared/api/client'
 import { useToast } from '@/shared/composables/useToast'
@@ -22,9 +23,15 @@ interface Job {
 
 const toast = useToast()
 const jobs = ref<Job[]>([])
+/** true only while a non-quiet request is in flight */
 const loading = ref(false)
+const loadError = ref('')
 const acting = ref<number | null>(null)
 let timer: ReturnType<typeof setInterval> | null = null
+/** monotonic request id — drop stale responses */
+let loadSeq = 0
+/** count of non-quiet loads so concurrent refresh cannot stick loading forever */
+let nonQuietInflight = 0
 
 const typeLabel: Record<string, string> = {
   deadlink_check: '死链检测',
@@ -38,17 +45,47 @@ const typeLink: Record<string, string> = {
   vector_index: '/admin/settings?tab=vector',
 }
 
+const hasActive = computed(() => jobs.value.some((j) => isActive(j)))
+
+/** API may return null (Go nil slice), {items:[]}, or Job[] */
+function normalizeList(data: unknown): Job[] {
+  if (data == null) return []
+  if (Array.isArray(data)) return data as Job[]
+  if (typeof data === 'object') {
+    const o = data as { items?: unknown; data?: unknown; list?: unknown }
+    if (Array.isArray(o.items)) return o.items as Job[]
+    if (Array.isArray(o.list)) return o.list as Job[]
+    if (Array.isArray(o.data)) return o.data as Job[]
+  }
+  return []
+}
+
 async function load(opts?: { quiet?: boolean }) {
-  loading.value = true
+  const quiet = !!opts?.quiet
+  const seq = ++loadSeq
+  if (!quiet) {
+    nonQuietInflight++
+    loading.value = true
+    loadError.value = ''
+  }
   try {
-    jobs.value = await apiGet('/api/v1/admin/jobs')
+    const data = await apiGet<Job[] | null>('/api/v1/admin/jobs')
+    if (seq !== loadSeq) return
+    // Always assign a real array — never null/undefined (breaks is-empty / v-for)
+    jobs.value = normalizeList(data)
+    loadError.value = ''
   } catch (e: unknown) {
-    // Polling every 3s must not spam toasts (e.g. session cookie missing → 请先登录)
-    if (!opts?.quiet) {
-      toast.error(e instanceof Error ? e.message : '加载失败')
+    if (seq !== loadSeq) return
+    // quiet poll: keep previous rows, no toast
+    if (!quiet) {
+      loadError.value = e instanceof Error ? e.message : '加载失败'
+      toast.error(loadError.value)
     }
   } finally {
-    loading.value = false
+    if (!quiet) {
+      nonQuietInflight = Math.max(0, nonQuietInflight - 1)
+      if (nonQuietInflight === 0) loading.value = false
+    }
   }
 }
 
@@ -58,7 +95,7 @@ async function stop(id: number) {
   try {
     await apiPost(`/api/v1/admin/jobs/${id}/cancel`)
     toast.success('已请求停止')
-    await load()
+    await load({ quiet: true })
   } catch (e: unknown) {
     toast.error(e instanceof Error ? e.message : '停止失败')
   } finally {
@@ -72,7 +109,7 @@ async function remove(id: number) {
   try {
     await apiDelete(`/api/v1/admin/jobs/${id}`)
     toast.success('已删除')
-    await load()
+    await load({ quiet: true })
   } catch (e: unknown) {
     toast.error(e instanceof Error ? e.message : '删除失败')
   } finally {
@@ -85,7 +122,7 @@ async function clearFinished() {
   try {
     const r = await apiPost<{ deleted: number }>('/api/v1/admin/jobs/clear')
     toast.success(`已清理 ${r.deleted ?? 0} 条`)
-    await load()
+    await load({ quiet: true })
   } catch (e: unknown) {
     toast.error(e instanceof Error ? e.message : '清理失败')
   }
@@ -103,12 +140,28 @@ function statusClass(status: string) {
   return 'c-tag'
 }
 
+function pollTick() {
+  if (typeof document !== 'undefined' && document.hidden) return
+  void load({ quiet: true })
+}
+
 onMounted(() => {
-  load()
-  timer = setInterval(() => load({ quiet: true }), 3000)
+  void load()
+  timer = setInterval(pollTick, 3000)
+  if (typeof document !== 'undefined') {
+    document.addEventListener('visibilitychange', onVisible)
+  }
 })
+function onVisible() {
+  if (!document.hidden) void load({ quiet: true })
+}
 onUnmounted(() => {
   if (timer) clearInterval(timer)
+  timer = null
+  loadSeq++ // invalidate in-flight
+  if (typeof document !== 'undefined') {
+    document.removeEventListener('visibilitychange', onVisible)
+  }
 })
 </script>
 
@@ -118,7 +171,9 @@ onUnmounted(() => {
       <h1>任务中心</h1>
       <div class="page-header__actions">
         <button type="button" class="c-btn c-btn--ghost c-btn--sm" @click="clearFinished">清空已结束</button>
-        <button type="button" class="c-btn c-btn--ghost c-btn--sm" @click="load">刷新</button>
+        <button type="button" class="c-btn c-btn--ghost c-btn--sm" :disabled="loading" @click="load()">
+          刷新
+        </button>
       </div>
     </header>
 
@@ -130,7 +185,10 @@ onUnmounted(() => {
       </div>
     </section>
 
-    <AdminTable :loading="loading" :is-empty="!jobs.length" empty="暂无任务记录">
+    <p v-if="loadError && !jobs.length" class="jobs-error">{{ loadError }}</p>
+    <p v-if="hasActive" class="jobs-live">有进行中的任务 · 每 3 秒自动刷新</p>
+
+    <AdminTable :loading="loading" :is-empty="jobs.length === 0" empty="暂无任务记录">
       <template #head>
         <tr>
           <th class="c-col-id">ID</th>
@@ -222,6 +280,16 @@ onUnmounted(() => {
 .mono {
   font-family: var(--font-mono, ui-monospace, monospace);
   font-size: 12px;
+}
+.jobs-error {
+  margin: 0;
+  font-size: 13px;
+  color: #fca5a5;
+}
+.jobs-live {
+  margin: 0;
+  font-size: 12px;
+  color: var(--console-text-3);
 }
 :deep(.c-tag--run) {
   color: #5ef0ff;

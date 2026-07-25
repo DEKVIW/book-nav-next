@@ -168,6 +168,48 @@ func (s *AdminService) UpdateUser(ctx context.Context, actor *domain.User, id in
 	return u, nil
 }
 
+// UploadSiteAsset stores a site logo or favicon under data/uploads/branding/.
+// kind: "logo" | "favicon". Returns public /media/branding/... path (does not write settings).
+func (s *AdminService) UploadSiteAsset(ctx context.Context, actor *domain.User, kind, filename string, r io.Reader) (string, error) {
+	if actor == nil || !actor.Role.IsSuperAdmin() {
+		return "", apperr.New(apperr.Forbidden, "需要超级管理员")
+	}
+	kind = strings.ToLower(strings.TrimSpace(kind))
+	if kind != "logo" && kind != "favicon" {
+		return "", apperr.New(apperr.Validation, "kind 仅支持 logo 或 favicon")
+	}
+	ext := strings.ToLower(filepath.Ext(filename))
+	switch ext {
+	case ".jpg", ".jpeg", ".png", ".gif", ".webp", ".svg", ".ico":
+	default:
+		return "", apperr.New(apperr.Validation, "仅支持 JPG / PNG / GIF / WebP / SVG / ICO")
+	}
+	dir := filepath.Join(s.dataDir, "uploads", "branding")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return "", err
+	}
+	var rnd [4]byte
+	_, _ = rand.Read(rnd[:])
+	name := fmt.Sprintf("%s_%s_%s%s", kind, time.Now().UTC().Format("20060102150405"), hex.EncodeToString(rnd[:]), ext)
+	dst := filepath.Join(dir, name)
+	f, err := os.Create(dst)
+	if err != nil {
+		return "", err
+	}
+	const maxSize = 5 << 20
+	n, err := io.Copy(f, io.LimitReader(r, maxSize+1))
+	_ = f.Close()
+	if err != nil {
+		_ = os.Remove(dst)
+		return "", err
+	}
+	if n > maxSize {
+		_ = os.Remove(dst)
+		return "", apperr.New(apperr.Validation, "文件不能超过 5MB")
+	}
+	return "/media/branding/" + name, nil
+}
+
 // UploadUserAvatar stores an image under data/uploads/avatars and updates the user.
 // Returns the public /media/... path.
 func (s *AdminService) UploadUserAvatar(ctx context.Context, actor *domain.User, id int64, filename string, r io.Reader) (*domain.User, error) {

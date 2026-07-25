@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"log/slog"
 	"strings"
 
 	"github.com/booknav/book-nav/apps/server/internal/domain"
@@ -233,21 +234,26 @@ func (s *PortalService) Search(ctx context.Context, q string, user *domain.User,
 
 	mode := "keyword"
 	merged := keyword
+	scoreMap := map[int64]float64{}
+	usedVector := false
+	usedIntent := false
+	usedRerank := false
 
-	// 2) vector recall when AI requested and vector ready
-	if useAI {
+	// 2) vector + optional intent expand + optional LLM rerank
+	if useAI && s.settings != nil {
+		// 2a) vector recall
 		if cfg, ready := s.settings.VectorConfig(ctx); ready {
 			client := vector.NewClient(cfg)
 			if emb, err := client.Embed(ctx, q); err == nil {
 				if hits, err := client.Search(ctx, emb, cfg.MaxResults); err == nil && len(hits) > 0 {
 					ids := make([]int64, 0, len(hits))
-					scoreMap := map[int64]float64{}
 					for _, h := range hits {
 						ids = append(ids, h.ID)
 						scoreMap[h.ID] = h.Score
 					}
 					if vecSites, err := s.websites.GetByIDs(ctx, ids); err == nil {
 						merged = mergeSearchResults(keyword, vecSites, scoreMap)
+						usedVector = true
 						if len(keyword) > 0 {
 							mode = "hybrid"
 						} else {
@@ -258,6 +264,70 @@ func (s *PortalService) Search(ctx context.Context, q string, user *domain.User,
 			}
 			// embed/search failures silently fall back to keyword
 		}
+
+		// 2b) intent expand (LLM) — only for longer / natural-language queries
+		providers, _ := s.settings.loadProviders(ctx)
+		bindings := s.settings.loadTaskBindings(ctx)
+		if shouldRunIntent(q) {
+			if cand := s.settings.resolveTaskCandidate(providers, bindings, "intent"); cand != nil && cand.Model != "" {
+				if intent, err := analyzeSearchIntent(ctx, cand, q); err == nil && intent != nil {
+					extra := s.expandByIntent(ctx, intent)
+					if len(extra) > 0 {
+						merged = mergeSearchResults(merged, extra, scoreMap)
+						usedIntent = true
+						if mode == "keyword" {
+							mode = "hybrid"
+						}
+					}
+				} else if err != nil {
+					slog.Debug("search intent skipped", "err", err)
+				}
+			}
+		}
+
+		// 2c) LLM rerank — only when enough candidates and rerank model configured
+		if len(merged) >= 5 {
+			if cand := s.settings.resolveTaskCandidate(providers, bindings, "rerank"); cand != nil && cand.Model != "" {
+				limit := 40
+				if len(merged) < limit {
+					limit = len(merged)
+				}
+				items := make([]rerankItem, 0, limit)
+				for i, w := range merged {
+					if i >= limit {
+						break
+					}
+					items = append(items, rerankItem{ID: w.ID, Title: w.Title, Desc: w.Description, URL: w.URL})
+				}
+				if ordered, err := rerankWithLLM(ctx, cand, q, items, 20); err == nil && len(ordered) > 0 {
+					byID := map[int64]domain.Website{}
+					for _, w := range merged {
+						byID[w.ID] = w
+					}
+					var ranked []domain.Website
+					seen := map[int64]bool{}
+					for _, id := range ordered {
+						if w, ok := byID[id]; ok && !seen[id] {
+							seen[id] = true
+							ranked = append(ranked, w)
+						}
+					}
+					// append remainder in original order
+					for _, w := range merged {
+						if !seen[w.ID] {
+							ranked = append(ranked, w)
+						}
+					}
+					merged = ranked
+					usedRerank = true
+					if mode == "keyword" {
+						mode = "hybrid"
+					}
+				} else if err != nil {
+					slog.Debug("search rerank skipped", "err", err)
+				}
+			}
+		}
 	}
 
 	var out []domain.Website
@@ -267,12 +337,52 @@ func (s *PortalService) Search(ctx context.Context, q string, user *domain.User,
 			out = append(out, w)
 		}
 	}
+	aiUsed := useAI && (usedVector || usedIntent || usedRerank)
 	return &SearchResult{
 		Websites: out,
 		Query:    q,
 		Mode:     mode,
-		AI:       useAI && (mode == "vector" || mode == "hybrid"),
+		AI:       aiUsed,
 	}, nil
+}
+
+// expandByIntent runs extra keyword searches from intent keywords / related terms.
+func (s *PortalService) expandByIntent(ctx context.Context, intent *searchIntent) []domain.Website {
+	var terms []string
+	for _, k := range intent.Keywords {
+		k = strings.TrimSpace(k)
+		if k != "" {
+			terms = append(terms, k)
+		}
+	}
+	for _, k := range intent.RelatedTerms {
+		k = strings.TrimSpace(k)
+		if k != "" {
+			terms = append(terms, k)
+		}
+	}
+	if len(terms) > 8 {
+		terms = terms[:8]
+	}
+	seen := map[int64]bool{}
+	var out []domain.Website
+	for _, t := range terms {
+		if len([]rune(t)) < 2 {
+			continue
+		}
+		list, err := s.websites.Search(ctx, t, 40)
+		if err != nil {
+			continue
+		}
+		for _, w := range list {
+			if seen[w.ID] {
+				continue
+			}
+			seen[w.ID] = true
+			out = append(out, w)
+		}
+	}
+	return out
 }
 
 // mergeSearchResults: vector hits first (by score), then keyword-only extras.

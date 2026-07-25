@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { apiDelete, apiGet, apiPost, apiPut } from '@/shared/api/client'
+import { apiDelete, apiGet, apiPost, apiPostForm, apiPut } from '@/shared/api/client'
 import { useToast } from '@/shared/composables/useToast'
+import AppIcon from '@/shared/ui/AppIcon.vue'
 
 const toast = useToast()
 const route = useRoute()
@@ -13,6 +14,9 @@ const testing = ref(false)
 const indexing = ref(false)
 const detecting = ref(false)
 const testingTasks = ref(false)
+const uploading = ref<'logo' | 'favicon' | null>(null)
+const logoFileInput = ref<HTMLInputElement | null>(null)
+const faviconFileInput = ref<HTMLInputElement | null>(null)
 const testResult = ref<{ ok?: boolean; message?: string; details?: Record<string, string> } | null>(null)
 
 type TabKey = 'basic' | 'transition' | 'ai' | 'vector'
@@ -153,6 +157,38 @@ function applyNs(raw: Record<string, unknown>, target: Record<string, unknown>) 
 
 async function loadNs(ns: string) {
   return apiGet<Record<string, unknown>>(`/api/v1/admin/settings/${ns}`)
+}
+
+async function uploadBrand(kind: 'logo' | 'favicon', file: File) {
+  if (!file.type.startsWith('image/') && !file.name.toLowerCase().endsWith('.ico')) {
+    toast.error('请选择图片文件')
+    return
+  }
+  if (file.size > 5 * 1024 * 1024) {
+    toast.error('文件不能超过 5MB')
+    return
+  }
+  uploading.value = kind
+  try {
+    const fd = new FormData()
+    fd.append('file', file)
+    fd.append('kind', kind)
+    const data = await apiPostForm<{ url: string; kind: string }>('/api/v1/admin/settings/upload', fd)
+    if (kind === 'logo') site.logo = data.url
+    else site.favicon = data.url
+    toast.success(kind === 'logo' ? 'Logo 已上传' : 'Favicon 已上传')
+  } catch (e: unknown) {
+    toast.error(e instanceof Error ? e.message : '上传失败')
+  } finally {
+    uploading.value = null
+  }
+}
+
+function onBrandFile(kind: 'logo' | 'favicon', ev: Event) {
+  const input = ev.target as HTMLInputElement
+  const file = input.files?.[0]
+  input.value = ''
+  if (file) void uploadBrand(kind, file)
 }
 
 async function loadAIState() {
@@ -473,11 +509,47 @@ onMounted(() => {
               </label>
               <label>
                 Logo URL
-                <input v-model="site.logo" class="c-input" placeholder="https://" />
+                <div class="url-with-upload">
+                  <input v-model="site.logo" class="c-input" placeholder="https:// 或上传" />
+                  <input
+                    ref="logoFileInput"
+                    type="file"
+                    accept="image/*,.ico"
+                    hidden
+                    @change="onBrandFile('logo', $event)"
+                  />
+                  <button
+                    type="button"
+                    class="url-upload-btn"
+                    :disabled="uploading === 'logo'"
+                    title="上传本地图片"
+                    @click="logoFileInput?.click()"
+                  >
+                    <AppIcon name="upload" :size="15" />
+                  </button>
+                </div>
               </label>
               <label>
                 Favicon URL
-                <input v-model="site.favicon" class="c-input" placeholder="https://" />
+                <div class="url-with-upload">
+                  <input v-model="site.favicon" class="c-input" placeholder="https:// 或上传" />
+                  <input
+                    ref="faviconFileInput"
+                    type="file"
+                    accept="image/*,.ico"
+                    hidden
+                    @change="onBrandFile('favicon', $event)"
+                  />
+                  <button
+                    type="button"
+                    class="url-upload-btn"
+                    :disabled="uploading === 'favicon'"
+                    title="上传本地图片"
+                    @click="faviconFileInput?.click()"
+                  >
+                    <AppIcon name="upload" :size="15" />
+                  </button>
+                </div>
               </label>
               <label class="span-2">
                 页脚（HTML）
@@ -942,6 +1014,40 @@ onMounted(() => {
   gap: 6px;
   font-size: 12px;
   color: var(--console-text-2);
+}
+.url-with-upload {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+.url-with-upload .c-input {
+  padding-right: 40px;
+}
+.url-upload-btn {
+  position: absolute;
+  right: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--console-text-3);
+  cursor: pointer;
+  transition: color 0.15s, background 0.15s;
+}
+.url-upload-btn:hover:not(:disabled) {
+  color: #93c5fd;
+  background: rgba(59, 130, 246, 0.12);
+}
+.url-upload-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
 }
 .c-form--2col .span-2 {
   grid-column: 1 / -1;

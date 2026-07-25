@@ -209,6 +209,33 @@ func (h *AdminHandler) UpdateUser(w http.ResponseWriter, r *http.Request) {
 	response.OK(w, u.Public())
 }
 
+// UploadSiteAsset accepts multipart field "file" (or "image"); query/form kind=logo|favicon.
+func (h *AdminHandler) UploadSiteAsset(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseMultipartForm(6 << 20); err != nil {
+		response.BadRequest(w, "invalid multipart form")
+		return
+	}
+	kind := strings.TrimSpace(r.FormValue("kind"))
+	if kind == "" {
+		kind = strings.TrimSpace(r.URL.Query().Get("kind"))
+	}
+	file, hdr, err := r.FormFile("file")
+	if err != nil {
+		file, hdr, err = r.FormFile("image")
+	}
+	if err != nil {
+		response.BadRequest(w, "请选择图片文件")
+		return
+	}
+	defer file.Close()
+	url, err := h.admin.UploadSiteAsset(r.Context(), middleware.UserFrom(r.Context()), kind, hdr.Filename, file)
+	if err != nil {
+		writeErr(w, err)
+		return
+	}
+	response.OKMessage(w, map[string]any{"url": url, "kind": kind}, "上传成功")
+}
+
 // UploadUserAvatar accepts multipart field "avatar" (or "file").
 func (h *AdminHandler) UploadUserAvatar(w http.ResponseWriter, r *http.Request) {
 	id, _ := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
@@ -946,6 +973,9 @@ func (h *AdminHandler) ListJobs(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		writeErr(w, err)
 		return
+	}
+	if list == nil {
+		list = []domain.Job{}
 	}
 	response.OK(w, list)
 }
