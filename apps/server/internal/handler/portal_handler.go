@@ -105,38 +105,29 @@ func (h *PortalHandler) SearchStream(w http.ResponseWriter, r *http.Request) {
 		h.Search(w, r)
 		return
 	}
-	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Content-Type", "text/event-stream; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Connection", "keep-alive")
+	w.Header().Set("X-Accel-Buffering", "no")
 
-	res, err := h.portal.Search(r.Context(), q, middleware.UserFrom(r.Context()), useAI)
-	if err != nil {
-		payload, _ := json.Marshal(map[string]any{"stage": "error", "error": err.Error(), "websites": []any{}})
+	writeStage := func(res service.SearchResult) {
+		payload, err := json.Marshal(res)
+		if err != nil {
+			return
+		}
 		_, _ = w.Write([]byte("data: " + string(payload) + "\n\n"))
 		flusher.Flush()
-		return
 	}
-	list := res.Websites
-	half := list
-	if len(list) > 5 {
-		half = list[:5]
-	}
-	for _, stage := range []struct {
-		name string
-		data any
-	}{
-		{"initial", half},
-		{"enhanced", list},
-		{"final", list},
-	} {
+
+	_, err := h.portal.SearchProgressive(r.Context(), q, middleware.UserFrom(r.Context()), useAI, func(stage service.SearchResult) {
+		writeStage(stage)
+	})
+	if err != nil {
 		payload, _ := json.Marshal(map[string]any{
-			"stage":    stage.name,
-			"websites": stage.data,
-			"meta": map[string]any{
-				"query": res.Query,
-				"ai":    res.AI,
-				"mode":  res.Mode,
-			},
+			"stage":    "error",
+			"error":    err.Error(),
+			"websites": []any{},
+			"query":    q,
 		})
 		_, _ = w.Write([]byte("data: " + string(payload) + "\n\n"))
 		flusher.Flush()
@@ -159,6 +150,41 @@ func (h *PortalHandler) FetchSite(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	response.OK(w, info)
+}
+
+func (h *PortalHandler) TranslateText(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		Text  string `json:"text"`
+		Field string `json:"field"`
+	}
+	if err := decodeJSON(r, &body); err != nil {
+		response.BadRequest(w, "invalid json")
+		return
+	}
+	out, err := h.jobs.TranslateText(r.Context(), body.Text, body.Field)
+	if err != nil {
+		writeErr(w, err)
+		return
+	}
+	response.OK(w, out)
+}
+
+func (h *PortalHandler) EnhanceSiteInfo(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		URL         string `json:"url"`
+		Title       string `json:"title"`
+		Description string `json:"description"`
+	}
+	if err := decodeJSON(r, &body); err != nil {
+		response.BadRequest(w, "invalid json")
+		return
+	}
+	out, err := h.jobs.EnhanceSiteInfo(r.Context(), body.URL, body.Title, body.Description)
+	if err != nil {
+		writeErr(w, err)
+		return
+	}
+	response.OK(w, out)
 }
 
 func (h *PortalHandler) CreateWebsite(w http.ResponseWriter, r *http.Request) {

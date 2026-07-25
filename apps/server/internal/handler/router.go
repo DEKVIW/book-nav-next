@@ -120,6 +120,8 @@ func NewRouter(d Deps) http.Handler {
 				wr.Delete("/websites/{id}", portalH.DeleteWebsite)
 				wr.Put("/websites/order", portalH.ReorderWebsites)
 				wr.Put("/categories/order", portalH.ReorderCategories)
+				wr.Post("/utils/translate", portalH.TranslateText)
+				wr.Post("/utils/site-info", portalH.EnhanceSiteInfo)
 			})
 		})
 

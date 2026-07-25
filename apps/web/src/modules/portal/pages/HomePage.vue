@@ -487,8 +487,37 @@ function onDrop(cat: Category, target: Website, e: DragEvent) {
     .catch((err) => toast.error(err.message || '排序失败'))
 }
 
+async function onFormTranslate(payload: { field: 'title' | 'description'; text: string }) {
+  try {
+    const r = await portal.translateText(payload.text, payload.field)
+    formRef.value?.applyTranslate(payload.field, r.text || '')
+    toast.success(payload.field === 'title' ? '标题已翻译' : '描述已翻译')
+  } catch (err: unknown) {
+    formRef.value?.clearAiBusy()
+    toast.error(err instanceof Error ? err.message : '翻译失败')
+  }
+}
+
+async function onFormEnhance(payload: { url: string; title: string; description: string }) {
+  try {
+    const r = await portal.enhanceSiteInfo(payload)
+    formRef.value?.applyEnhance({
+      title: r.title || undefined,
+      description: r.description || undefined,
+    })
+    toast.success('AI 已补全，请核对')
+  } catch (err: unknown) {
+    formRef.value?.clearAiBusy()
+    toast.error(err instanceof Error ? err.message : 'AI 补全失败')
+  }
+}
+
 async function onSearch(q: string) {
-  await portal.search(q, useAI.value && aiAvailable.value)
+  try {
+    await portal.search(q, useAI.value && aiAvailable.value)
+  } catch (err: unknown) {
+    toast.error(err instanceof Error ? err.message : '搜索失败')
+  }
 }
 
 function scrollTop() {
@@ -525,8 +554,12 @@ function scrollTop() {
           <h2 class="bay-header__title">搜索结果</h2>
           <span class="bay-header__meta">
             {{ portal.searchQuery }} · {{ portal.searchResults.length }} 条
-            <template v-if="useAI && aiAvailable"> · AI</template>
+            <template v-if="portal.searchMeta?.mode"> · {{ portal.searchMeta.mode }}</template>
+            <template v-if="portal.searchLoading"> · 优化中…</template>
+            <template v-else-if="portal.searchMeta?.refined"> · 已精排</template>
+            <template v-else-if="useAI && aiAvailable"> · AI</template>
           </span>
+          <p v-if="portal.searchMeta?.summary" class="search-summary">{{ portal.searchMeta.summary }}</p>
           <button type="button" class="m-btn m-btn--ghost" @click="portal.clearSearch()">返回导航</button>
         </header>
         <div v-if="!portal.searchResults.length" class="state">没有匹配的链接</div>
@@ -650,9 +683,12 @@ function scrollTop() {
       :initial-url="formUrl"
       :loading="formLoading"
       :progress-text="formProgress"
+      :ai-available="aiAvailable && auth.isAdmin"
       @close="formOpen = false"
       @submit="onFormSubmit"
       @fetch-meta="onFetchMeta"
+      @translate="onFormTranslate"
+      @enhance="onFormEnhance"
     />
 
     <DuplicateDialog
@@ -685,6 +721,15 @@ function scrollTop() {
 </template>
 
 <style scoped>
+.search-summary {
+  margin: 8px 0 0;
+  width: 100%;
+  flex-basis: 100%;
+  font-size: 12px;
+  color: var(--text-muted);
+  line-height: 1.45;
+}
+
 .state {
   padding: 48px;
   text-align: center;

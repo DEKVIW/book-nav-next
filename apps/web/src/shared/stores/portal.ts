@@ -3,6 +3,14 @@ import { ref } from 'vue'
 import { apiGet, apiPost, apiPatch, apiDelete, apiPut } from '@/shared/api/client'
 import type { Category, HomeData, PublicSettings, Website } from '@/shared/types/models'
 
+export type SearchMeta = {
+  mode?: string
+  ai?: boolean
+  stage?: string
+  summary?: string
+  refined?: boolean
+}
+
 export const usePortalStore = defineStore('portal', () => {
   const categories = ref<Category[]>([])
   const featured = ref<Website[]>([])
@@ -11,11 +19,14 @@ export const usePortalStore = defineStore('portal', () => {
   const error = ref('')
   const searchResults = ref<Website[] | null>(null)
   const searchQuery = ref('')
+  const searchMeta = ref<SearchMeta | null>(null)
+  const searchLoading = ref(false)
   let loadHomeInflight: Promise<void> | null = null
+  let searchSeq = 0
+  let searchES: EventSource | null = null
 
   async function loadHome() {
     if (loadHomeInflight) return loadHomeInflight
-    // Only block UI with loading when we have nothing to show yet
     if (!categories.value.length) loading.value = true
     error.value = ''
     loadHomeInflight = (async () => {
@@ -34,21 +45,137 @@ export const usePortalStore = defineStore('portal', () => {
     return loadHomeInflight
   }
 
+  function stopSearchStream() {
+    if (searchES) {
+      searchES.close()
+      searchES = null
+    }
+  }
+
+  function applySearchPayload(
+    seq: number,
+    data: {
+      websites?: Website[]
+      mode?: string
+      ai?: boolean
+      stage?: string
+      summary?: string
+      refined?: boolean
+    },
+  ) {
+    if (seq !== searchSeq) return
+    searchResults.value = data.websites || []
+    searchMeta.value = {
+      mode: data.mode,
+      ai: data.ai,
+      stage: data.stage,
+      summary: data.summary,
+      refined: data.refined,
+    }
+    if (data.stage === 'final' || data.stage === 'error') {
+      searchLoading.value = false
+      stopSearchStream()
+    }
+  }
+
+  /**
+   * Non-AI: one-shot JSON.
+   * AI: two-stage SSE (initial fusion → optional final rerank).
+   * searchSeq drops stale in-flight responses.
+   */
   async function search(q: string, ai = false) {
-    searchQuery.value = q
-    if (!q.trim()) {
+    const query = q.trim()
+    searchQuery.value = query
+    stopSearchStream()
+    const seq = ++searchSeq
+    if (!query) {
       searchResults.value = null
+      searchMeta.value = null
+      searchLoading.value = false
       return
     }
-    const data = await apiGet<{ websites: Website[] }>(
-      `/api/v1/portal/search?q=${encodeURIComponent(q)}&ai=${ai ? 1 : 0}`,
-    )
-    searchResults.value = data.websites || []
+    searchLoading.value = true
+    searchMeta.value = { stage: 'loading' }
+
+    if (!ai) {
+      try {
+        const data = await apiGet<{
+          websites?: Website[]
+          mode?: string
+          ai?: boolean
+          summary?: string
+          refined?: boolean
+        }>(`/api/v1/portal/search?q=${encodeURIComponent(query)}&ai=0`)
+        if (seq !== searchSeq) return
+        applySearchPayload(seq, { ...data, stage: 'final' })
+      } catch (e) {
+        if (seq !== searchSeq) return
+        searchResults.value = []
+        searchMeta.value = { stage: 'error' }
+        searchLoading.value = false
+        throw e
+      }
+      return
+    }
+
+    await new Promise<void>((resolve, reject) => {
+      const url = `/api/v1/portal/search/stream?q=${encodeURIComponent(query)}&ai=1`
+      const es = new EventSource(url)
+      searchES = es
+      let settled = false
+      const done = (err?: Error) => {
+        if (settled) return
+        settled = true
+        stopSearchStream()
+        if (seq === searchSeq) searchLoading.value = false
+        if (err) reject(err)
+        else resolve()
+      }
+      es.onmessage = (ev) => {
+        if (seq !== searchSeq) {
+          es.close()
+          return
+        }
+        try {
+          const data = JSON.parse(ev.data) as {
+            websites?: Website[]
+            mode?: string
+            ai?: boolean
+            stage?: string
+            summary?: string
+            refined?: boolean
+            error?: string
+          }
+          if (data.stage === 'error') {
+            if (!searchResults.value) searchResults.value = []
+            searchMeta.value = { stage: 'error' }
+            done(new Error(data.error || '搜索失败'))
+            return
+          }
+          applySearchPayload(seq, data)
+          if (data.stage === 'final') done()
+        } catch (e) {
+          done(e instanceof Error ? e : new Error('parse error'))
+        }
+      }
+      es.onerror = () => {
+        if (searchResults.value && seq === searchSeq) {
+          searchMeta.value = { ...(searchMeta.value || {}), stage: 'final' }
+          done()
+          return
+        }
+        done(new Error('搜索连接中断'))
+      }
+    })
   }
 
   function clearSearch() {
+    searchSeq++
+    stopSearchStream()
     searchQuery.value = ''
     searchResults.value = null
+    searchMeta.value = null
+    searchLoading.value = false
   }
 
   async function createWebsite(payload: Record<string, unknown>) {
@@ -92,6 +219,20 @@ export const usePortalStore = defineStore('portal', () => {
     )
   }
 
+  async function translateText(text: string, field: 'title' | 'description' = 'description') {
+    return apiPost<{ text: string; original: string; field: string }>(
+      '/api/v1/portal/utils/translate',
+      { text, field },
+    )
+  }
+
+  async function enhanceSiteInfo(payload: { url?: string; title?: string; description?: string }) {
+    return apiPost<{ title?: string; description?: string }>(
+      '/api/v1/portal/utils/site-info',
+      payload,
+    )
+  }
+
   async function visit(id: number) {
     return apiPost<{
       website: Website
@@ -112,6 +253,8 @@ export const usePortalStore = defineStore('portal', () => {
     error,
     searchResults,
     searchQuery,
+    searchMeta,
+    searchLoading,
     loadHome,
     search,
     clearSearch,
@@ -122,6 +265,8 @@ export const usePortalStore = defineStore('portal', () => {
     reorderCategories,
     checkUrl,
     fetchSite,
+    translateText,
+    enhanceSiteInfo,
     visit,
     loadCategoryAll,
   }

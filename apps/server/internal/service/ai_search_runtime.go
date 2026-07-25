@@ -147,10 +147,11 @@ func analyzeSearchIntent(ctx context.Context, cand *taskCandidate, query string)
 	return parseSearchIntent(raw)
 }
 
-// rerankWithLLM asks model to order website ids by relevance; returns ordered ids (subset).
-func rerankWithLLM(ctx context.Context, cand *taskCandidate, query string, items []rerankItem, maxOut int) ([]int64, error) {
+// rerankWithLLM ranks candidate ids; returns validated order + optional summary.
+// Only IDs present in items are kept; empty/invalid model output is an error (caller keeps fusion order).
+func rerankWithLLM(ctx context.Context, cand *taskCandidate, query, intentSummary string, items []rerankItem, maxOut int) ([]int64, string, error) {
 	if cand == nil || cand.Model == "" || len(items) == 0 {
-		return nil, fmt.Errorf("no items")
+		return nil, "", fmt.Errorf("no items")
 	}
 	if maxOut <= 0 {
 		maxOut = 20
@@ -162,35 +163,45 @@ func rerankWithLLM(ctx context.Context, cand *taskCandidate, query string, items
 	for i, it := range items {
 		fmt.Fprintf(&b, "%d. id=%d | %s | %s\n", i+1, it.ID, truncate(it.Title, 40), truncate(it.Desc, 60))
 	}
+	intentLine := strings.TrimSpace(intentSummary)
+	if intentLine == "" {
+		intentLine = "(none)"
+	}
 	prompt := fmt.Sprintf(`你是网站导航排序助手。按与用户查询的相关性从高到低排序，只返回 JSON。
 
 用户查询：%s
+意图摘要：%s
 候选（最多选 %d 个）：
 %s
 返回格式：
-{"order":[id1,id2,id3],"summary":"一句话"}
+{"order":[id1,id2,id3],"summary":"一句话中文摘要"}
 
-order 里只使用上面出现的 id，按相关度降序，最多 %d 个。`, query, maxOut, b.String(), maxOut)
+硬性规则：
+1. order 只能使用上面出现的 id，禁止编造
+2. 按相关度降序，最多 %d 个
+3. 不要把明显无关的站排到最前`, query, intentLine, maxOut, b.String(), maxOut)
 
 	raw, err := chatCompletion(ctx, cand.APIBaseURL, cand.APIKey, cand.Model, prompt, 400)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	js := extractJSONObject(raw)
 	if js == "" {
-		return nil, fmt.Errorf("无 JSON")
+		return nil, "", fmt.Errorf("no JSON")
 	}
 	var out struct {
-		Order []int64 `json:"order"`
+		Order   []int64 `json:"order"`
+		Summary string  `json:"summary"`
 	}
 	if err := json.Unmarshal([]byte(js), &out); err != nil {
-		// try order as []any
 		var out2 struct {
-			Order []any `json:"order"`
+			Order   []any  `json:"order"`
+			Summary string `json:"summary"`
 		}
 		if err2 := json.Unmarshal([]byte(js), &out2); err2 != nil {
-			return nil, err
+			return nil, "", err
 		}
+		out.Summary = out2.Summary
 		for _, v := range out2.Order {
 			switch t := v.(type) {
 			case float64:
@@ -202,9 +213,8 @@ order 里只使用上面出现的 id，按相关度降序，最多 %d 个。`, q
 		}
 	}
 	if len(out.Order) == 0 {
-		return nil, fmt.Errorf("empty order")
+		return nil, "", fmt.Errorf("empty order")
 	}
-	// keep only known ids, preserve model order
 	known := map[int64]bool{}
 	for _, it := range items {
 		known[it.ID] = true
@@ -222,9 +232,9 @@ order 里只使用上面出现的 id，按相关度降序，最多 %d 个。`, q
 		}
 	}
 	if len(ordered) == 0 {
-		return nil, fmt.Errorf("no valid ids")
+		return nil, "", fmt.Errorf("no valid ids")
 	}
-	return ordered, nil
+	return ordered, strings.TrimSpace(out.Summary), nil
 }
 
 type rerankItem struct {
