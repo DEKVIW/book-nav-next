@@ -1,11 +1,17 @@
 package middleware
 
 import (
+	"bufio"
 	"log/slog"
+	"net"
 	"net/http"
 	"time"
 )
 
+// statusWriter records status/bytes for access logs.
+// It must forward http.Flusher (and optional Hijacker) so SSE / streaming
+// handlers still see the real ResponseWriter capabilities. Without Flush,
+// portal SearchStream falls back to one-shot JSON and EventSource breaks.
 type statusWriter struct {
 	http.ResponseWriter
 	status int
@@ -24,6 +30,23 @@ func (w *statusWriter) Write(b []byte) (int, error) {
 	n, err := w.ResponseWriter.Write(b)
 	w.bytes += n
 	return n, err
+}
+
+func (w *statusWriter) Flush() {
+	if f, ok := w.ResponseWriter.(http.Flusher); ok {
+		f.Flush()
+	}
+}
+
+func (w *statusWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) {
+	if h, ok := w.ResponseWriter.(http.Hijacker); ok {
+		return h.Hijack()
+	}
+	return nil, nil, http.ErrNotSupported
+}
+
+func (w *statusWriter) Unwrap() http.ResponseWriter {
+	return w.ResponseWriter
 }
 
 func AccessLog(next http.Handler) http.Handler {

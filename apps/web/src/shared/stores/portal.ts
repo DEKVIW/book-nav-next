@@ -78,9 +78,27 @@ export const usePortalStore = defineStore('portal', () => {
     }
   }
 
+  type SearchPayload = {
+    websites?: Website[]
+    mode?: string
+    ai?: boolean
+    stage?: string
+    summary?: string
+    refined?: boolean
+    error?: string
+  }
+
+  async function searchOnceJSON(query: string, ai: boolean, seq: number) {
+    const data = await apiGet<SearchPayload>(
+      `/api/v1/portal/search?q=${encodeURIComponent(query)}&ai=${ai ? '1' : '0'}`,
+    )
+    if (seq !== searchSeq) return
+    applySearchPayload(seq, { ...data, stage: 'final' })
+  }
+
   /**
    * Non-AI: one-shot JSON.
-   * AI: two-stage SSE (initial fusion → optional final rerank).
+   * AI: prefer two-stage SSE; on stream failure fall back to one-shot JSON (same pipeline final).
    * searchSeq drops stale in-flight responses.
    */
   async function search(q: string, ai = false) {
@@ -99,15 +117,7 @@ export const usePortalStore = defineStore('portal', () => {
 
     if (!ai) {
       try {
-        const data = await apiGet<{
-          websites?: Website[]
-          mode?: string
-          ai?: boolean
-          summary?: string
-          refined?: boolean
-        }>(`/api/v1/portal/search?q=${encodeURIComponent(query)}&ai=0`)
-        if (seq !== searchSeq) return
-        applySearchPayload(seq, { ...data, stage: 'final' })
+        await searchOnceJSON(query, false, seq)
       } catch (e) {
         if (seq !== searchSeq) return
         searchResults.value = []
@@ -118,55 +128,74 @@ export const usePortalStore = defineStore('portal', () => {
       return
     }
 
-    await new Promise<void>((resolve, reject) => {
-      const url = `/api/v1/portal/search/stream?q=${encodeURIComponent(query)}&ai=1`
-      const es = new EventSource(url)
-      searchES = es
-      let settled = false
-      const done = (err?: Error) => {
-        if (settled) return
-        settled = true
-        stopSearchStream()
-        if (seq === searchSeq) searchLoading.value = false
-        if (err) reject(err)
-        else resolve()
-      }
-      es.onmessage = (ev) => {
-        if (seq !== searchSeq) {
-          es.close()
-          return
+    // Progressive SSE; if proxy/middleware breaks the stream, fall back to JSON.
+    let gotMessage = false
+    try {
+      await new Promise<void>((resolve, reject) => {
+        const url = `/api/v1/portal/search/stream?q=${encodeURIComponent(query)}&ai=1`
+        const es = new EventSource(url)
+        searchES = es
+        let settled = false
+        const done = (err?: Error) => {
+          if (settled) return
+          settled = true
+          stopSearchStream()
+          if (seq === searchSeq) searchLoading.value = false
+          if (err) reject(err)
+          else resolve()
         }
-        try {
-          const data = JSON.parse(ev.data) as {
-            websites?: Website[]
-            mode?: string
-            ai?: boolean
-            stage?: string
-            summary?: string
-            refined?: boolean
-            error?: string
-          }
-          if (data.stage === 'error') {
-            if (!searchResults.value) searchResults.value = []
-            searchMeta.value = { stage: 'error' }
-            done(new Error(data.error || '搜索失败'))
+        es.onmessage = (ev) => {
+          if (seq !== searchSeq) {
+            es.close()
             return
           }
-          applySearchPayload(seq, data)
-          if (data.stage === 'final') done()
-        } catch (e) {
-          done(e instanceof Error ? e : new Error('parse error'))
+          gotMessage = true
+          try {
+            const data = JSON.parse(ev.data) as SearchPayload
+            if (data.stage === 'error') {
+              if (!searchResults.value) searchResults.value = []
+              searchMeta.value = { stage: 'error' }
+              done(new Error(data.error || '搜索失败'))
+              return
+            }
+            applySearchPayload(seq, data)
+            if (data.stage === 'final') done()
+          } catch (e) {
+            done(e instanceof Error ? e : new Error('parse error'))
+          }
         }
-      }
-      es.onerror = () => {
-        if (searchResults.value && seq === searchSeq) {
-          searchMeta.value = { ...(searchMeta.value || {}), stage: 'final' }
-          done()
+        es.onerror = () => {
+          // Browser fires error when the stream closes after a normal final event,
+          // or when the connection never became SSE (e.g. JSON fallback from server).
+          if (settled) return
+          if (gotMessage || (searchResults.value && seq === searchSeq)) {
+            if (seq === searchSeq && searchMeta.value?.stage !== 'final') {
+              searchMeta.value = { ...(searchMeta.value || {}), stage: 'final' }
+            }
+            done()
+            return
+          }
+          done(new Error('搜索连接中断'))
+        }
+      })
+    } catch (e) {
+      if (seq !== searchSeq) return
+      // No progressive frame received → one-shot AI JSON (full final pipeline).
+      if (!gotMessage && !(searchResults.value && searchResults.value.length)) {
+        try {
+          searchLoading.value = true
+          await searchOnceJSON(query, true, seq)
           return
+        } catch (e2) {
+          if (seq !== searchSeq) return
+          searchResults.value = []
+          searchMeta.value = { stage: 'error' }
+          searchLoading.value = false
+          throw e2 instanceof Error ? e2 : e
         }
-        done(new Error('搜索连接中断'))
       }
-    })
+      throw e
+    }
   }
 
   function clearSearch() {

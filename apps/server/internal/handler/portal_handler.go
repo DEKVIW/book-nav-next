@@ -100,15 +100,20 @@ func (h *PortalHandler) Search(w http.ResponseWriter, r *http.Request) {
 func (h *PortalHandler) SearchStream(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query().Get("q")
 	useAI := r.URL.Query().Get("ai") == "1" || strings.EqualFold(r.URL.Query().Get("ai"), "true")
+	// Prefer real flusher (may be wrapped by access-log middleware which must forward Flush).
 	flusher, ok := w.(http.Flusher)
 	if !ok {
+		// Last resort: same pipeline, one JSON response (EventSource cannot parse this).
 		h.Search(w, r)
 		return
 	}
 	w.Header().Set("Content-Type", "text/event-stream; charset=utf-8")
-	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Cache-Control", "no-cache, no-transform")
 	w.Header().Set("Connection", "keep-alive")
-	w.Header().Set("X-Accel-Buffering", "no")
+	w.Header().Set("X-Accel-Buffering", "no") // nginx: disable response buffering for SSE
+	// Establish stream immediately so proxies/clients see event-stream, not a stalled request.
+	_, _ = w.Write([]byte(": ok\n\n"))
+	flusher.Flush()
 
 	writeStage := func(res service.SearchResult) {
 		payload, err := json.Marshal(res)
