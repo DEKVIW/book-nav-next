@@ -135,8 +135,7 @@ const totalPages = () => Math.max(1, Math.ceil(total.value / pageSize))
 watch([page, categoryId], () => load())
 
 onMounted(async () => {
-  await loadCats()
-  await load()
+  await Promise.all([loadCats(), load()])
 })
 </script>
 

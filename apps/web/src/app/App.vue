@@ -1,12 +1,10 @@
 <script setup lang="ts">
-import { computed, onMounted } from 'vue'
+import { computed } from 'vue'
 import { RouterView, useRoute } from 'vue-router'
 import ToastHost from '@/shared/ui/ToastHost.vue'
 import CardTooltipHost from '@/shared/ui/CardTooltipHost.vue'
 import SpaceSky from '@/shared/ui/SpaceSky.vue'
-import { useAuthStore } from '@/shared/stores/auth'
 
-const auth = useAuthStore()
 const route = useRoute()
 
 /** 前台星空：后台与过渡页自管背景时关闭，避免叠两层 */
@@ -16,15 +14,12 @@ const showAmbientSky = computed(() => {
   if (p.startsWith('/goto')) return false
   return true
 })
-
-onMounted(() => {
-  auth.fetchMe()
-})
 </script>
 
 <template>
   <div class="mecha-void app-root" :class="{ 'app-root--sky': showAmbientSky }">
-    <SpaceSky v-if="showAmbientSky" intensity="full" />
+    <!-- ambient: 更轻的 canvas，避免首屏 full 星空抢主线程 -->
+    <SpaceSky v-if="showAmbientSky" intensity="ambient" />
     <RouterView />
     <ToastHost />
     <CardTooltipHost />

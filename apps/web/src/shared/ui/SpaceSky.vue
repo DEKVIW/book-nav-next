@@ -226,14 +226,25 @@ function startSky(intensity: 'full' | 'ambient') {
   }
 }
 
+let bootRaf = 0
+
 function boot() {
   stop?.()
-  stop = startSky(props.intensity)
+  if (bootRaf) cancelAnimationFrame(bootRaf)
+  // Defer canvas work past first paint so shell/chrome can appear first
+  bootRaf = requestAnimationFrame(() => {
+    bootRaf = requestAnimationFrame(() => {
+      bootRaf = 0
+      stop = startSky(props.intensity)
+    })
+  })
 }
 
 onMounted(boot)
 watch(() => props.intensity, boot)
 onUnmounted(() => {
+  if (bootRaf) cancelAnimationFrame(bootRaf)
+  bootRaf = 0
   stop?.()
   stop = null
 })

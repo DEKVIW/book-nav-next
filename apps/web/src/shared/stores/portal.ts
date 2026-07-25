@@ -11,20 +11,27 @@ export const usePortalStore = defineStore('portal', () => {
   const error = ref('')
   const searchResults = ref<Website[] | null>(null)
   const searchQuery = ref('')
+  let loadHomeInflight: Promise<void> | null = null
 
   async function loadHome() {
-    loading.value = true
+    if (loadHomeInflight) return loadHomeInflight
+    // Only block UI with loading when we have nothing to show yet
+    if (!categories.value.length) loading.value = true
     error.value = ''
-    try {
-      const data = await apiGet<HomeData>('/api/v1/portal/home')
-      categories.value = data.categories || []
-      featured.value = data.featured || []
-      settings.value = data.settings
-    } catch (e: unknown) {
-      error.value = e instanceof Error ? e.message : '加载失败'
-    } finally {
-      loading.value = false
-    }
+    loadHomeInflight = (async () => {
+      try {
+        const data = await apiGet<HomeData>('/api/v1/portal/home')
+        categories.value = data.categories || []
+        featured.value = data.featured || []
+        settings.value = data.settings
+      } catch (e: unknown) {
+        error.value = e instanceof Error ? e.message : '加载失败'
+      } finally {
+        loading.value = false
+        loadHomeInflight = null
+      }
+    })()
+    return loadHomeInflight
   }
 
   async function search(q: string, ai = false) {

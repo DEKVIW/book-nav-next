@@ -504,10 +504,18 @@ function scrollTop() {
     @search="onSearch"
     @select-subcategory="onSidebarSubcategory"
   >
-    <div v-if="portal.loading" class="state">加载中…</div>
-    <div v-else-if="portal.error" class="state error">{{ portal.error }}</div>
+    <div v-if="portal.error && !portal.categories.length" class="state error">{{ portal.error }}</div>
+    <!-- skeleton while first home payload arrives — keep shell visible, avoid blank flash -->
+    <div v-else-if="portal.loading && !portal.categories.length" class="home-skeleton" aria-busy="true">
+      <div v-for="n in 3" :key="n" class="home-skeleton__bay">
+        <div class="home-skeleton__title" />
+        <div class="home-skeleton__grid">
+          <div v-for="m in 8" :key="m" class="home-skeleton__card" />
+        </div>
+      </div>
+    </div>
 
-    <template v-else>
+    <template v-else-if="!portal.loading || portal.categories.length">
       <!-- 搜索结果 -->
       <section v-if="portal.searchResults" class="search-layer">
         <header class="bay-header">

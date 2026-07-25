@@ -1,5 +1,8 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import { useAuthStore } from '@/shared/stores/auth'
+import { usePortalStore } from '@/shared/stores/portal'
+// Eager home: avoid extra round-trip after index.js (shell + cards paint sooner)
+import HomePage from '@/modules/portal/pages/HomePage.vue'
 
 export const router = createRouter({
   history: createWebHistory(),
@@ -7,7 +10,7 @@ export const router = createRouter({
     {
       path: '/',
       name: 'home',
-      component: () => import('@/modules/portal/pages/HomePage.vue'),
+      component: HomePage,
     },
     {
       path: '/login',
@@ -107,14 +110,28 @@ export const router = createRouter({
 
 router.beforeEach(async (to) => {
   const auth = useAuthStore()
+  const needsAdmin = to.matched.some((r) => r.meta.requiresAdmin)
+  const needsSuper = to.matched.some((r) => r.meta.requiresSuper)
+  // Portal: do not block first paint on /auth/me (~0.7s RTT). Admin still awaits session.
   if (!auth.loaded) {
-    await auth.fetchMe()
+    if (needsAdmin || needsSuper) {
+      await auth.fetchMe()
+    } else {
+      void auth.fetchMe()
+    }
   }
-  if (to.matched.some((r) => r.meta.requiresAdmin) && !auth.isAdmin) {
+  if (needsAdmin && !auth.isAdmin) {
     return { name: 'login', query: { redirect: to.fullPath } }
   }
-  if (to.matched.some((r) => r.meta.requiresSuper) && !auth.isSuper) {
+  if (needsSuper && !auth.isSuper) {
     return { name: 'admin' }
   }
   return true
+})
+
+// Start home data fetch immediately after navigation (overlaps chunk/CSS paint)
+router.afterEach((to) => {
+  if (to.name === 'home') {
+    void usePortalStore().loadHome()
+  }
 })

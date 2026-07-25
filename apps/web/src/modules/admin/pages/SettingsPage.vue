@@ -221,11 +221,18 @@ async function loadAIState() {
 async function load() {
   loading.value = true
   try {
-    applyNs(await loadNs('site'), site)
-    applyNs(await loadNs('transition'), transition)
-    applyNs(await loadNs('announcement'), announcement)
-    applyNs(await loadNs('vector'), vector)
-    await loadAIState()
+    // Parallel: 5 serial RTTs (~3.4s) → one wave (~0.7s) on production latency
+    const [siteRaw, transitionRaw, announcementRaw, vectorRaw] = await Promise.all([
+      loadNs('site'),
+      loadNs('transition'),
+      loadNs('announcement'),
+      loadNs('vector'),
+      loadAIState().then(() => null),
+    ])
+    applyNs(siteRaw as Record<string, unknown>, site)
+    applyNs(transitionRaw as Record<string, unknown>, transition)
+    applyNs(announcementRaw as Record<string, unknown>, announcement)
+    applyNs(vectorRaw as Record<string, unknown>, vector)
   } catch (e: unknown) {
     toast.error(e instanceof Error ? e.message : '加载失败')
   } finally {
