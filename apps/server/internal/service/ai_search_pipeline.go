@@ -16,53 +16,49 @@ import (
 // ---------------------------------------------------------------------------
 // AI search pipeline (BookNav Next)
 //
-// Design (two-stage progressive + gated hybrid retrieval):
+// True progressive SSE (not “wait for all then dump”):
 //
-//   Stage initial (fast, parallel):
-//     - keyword LIKE on original query
-//     - vector: Embed(original q) → Qdrant
-//     - optional intent (long queries only) → gated keyword expansion
-//     - RRF fusion + exact-hit boost
+//   1) keyword LIKE finishes first → emit stage=partial (cards appear ASAP)
+//   2) vector + optional intent run in parallel → emit stage=partial again
+//      when fused set grows / mode changes (append feel on the client)
+//   3) optional LLM rerank → stage=final (reorder + summary only)
 //
-//   Stage final (optional refine):
-//     - LLM rerank over existing candidate IDs only
-//     - invalid/empty model output → keep initial order (no junk)
-//
-// Intent keywords are NEVER the sole embedding input for the primary vector
-// path; optional multi-query vector on top intent terms is capped and gated.
+// Non-stream Search() still returns only the final frame.
+// Intent keywords are NEVER the sole primary embedding input.
 // ---------------------------------------------------------------------------
 
 const (
-	searchQueryMaxRunes      = 100
-	searchKeywordLimit       = 100
-	searchIntentTermMax      = 5
-	searchIntentTermMinRunes = 2
-	searchIntentPerTermLimit = 25
-	searchIntentExtraCap     = 30
+	searchQueryMaxRunes       = 100
+	searchKeywordLimit        = 100
+	searchIntentTermMax       = 5
+	searchIntentTermMinRunes  = 2
+	searchIntentPerTermLimit  = 25
+	searchIntentExtraCap      = 30
 	searchRerankMinCandidates = 5
-	searchRerankInputMax     = 40
-	searchRerankOutputMax    = 20
-	searchRRF_K              = 60
-	searchExactBoost         = 0.35
-	searchIntentHitBoost     = 0.08
-	searchMultiQueryMax      = 2 // extra embeddings from intent keywords
-	searchIntentTimeout      = 1200 * time.Millisecond
-	searchRerankTimeout      = 1800 * time.Millisecond
-	searchVectorTimeout      = 2500 * time.Millisecond
+	searchRerankInputMax      = 40
+	searchRerankOutputMax     = 20
+	searchRRF_K               = 60
+	searchExactBoost          = 0.35
+	searchIntentHitBoost      = 0.08
+	searchMultiQueryMax       = 2 // extra embeddings from intent keywords
+	searchIntentTimeout       = 1200 * time.Millisecond
+	searchRerankTimeout       = 1800 * time.Millisecond
+	searchVectorTimeout       = 2500 * time.Millisecond
+	searchVectorBatchSize     = 8 // emit fused list as vector hits accumulate (feel of “逐批出现”)
 )
 
 // SearchResult is the API payload for portal search.
 type SearchResult struct {
-	Websites    []domain.Website `json:"websites"`
-	Query       string           `json:"query"`
-	Mode        string           `json:"mode"` // keyword | vector | hybrid
-	AI          bool             `json:"ai"`
-	Stage       string           `json:"stage,omitempty"` // initial | final
-	Summary     string           `json:"summary,omitempty"`
-	Refined     bool             `json:"refined,omitempty"`
-	UsedVector  bool             `json:"used_vector,omitempty"`
-	UsedIntent  bool             `json:"used_intent,omitempty"`
-	UsedRerank  bool             `json:"used_rerank,omitempty"`
+	Websites   []domain.Website `json:"websites"`
+	Query      string           `json:"query"`
+	Mode       string           `json:"mode"` // keyword | vector | hybrid
+	AI         bool             `json:"ai"`
+	Stage      string           `json:"stage,omitempty"` // partial | final | error
+	Summary    string           `json:"summary,omitempty"`
+	Refined    bool             `json:"refined,omitempty"`
+	UsedVector bool             `json:"used_vector,omitempty"`
+	UsedIntent bool             `json:"used_intent,omitempty"`
+	UsedRerank bool             `json:"used_rerank,omitempty"`
 }
 
 // SearchStageHandler receives progressive stages (SSE). May be nil.
@@ -90,12 +86,45 @@ func (s *PortalService) searchPipeline(ctx context.Context, q string, user *doma
 
 	useAI = s.resolveUseAI(ctx, user, useAI)
 	short := isShortSearchQuery(q)
+	emit := onStage != nil
 
-	// --- parallel recall ---
-	type kwRes struct {
-		list []domain.Website
-		err  error
+	emitPartial := func(list []domain.Website, mode string, ai, usedVec, usedIntent bool) SearchResult {
+		frame := SearchResult{
+			Websites:   s.filterVisible(ctx, user, list),
+			Query:      q,
+			Mode:       mode,
+			AI:         ai,
+			Stage:      "partial",
+			UsedVector: usedVec,
+			UsedIntent: usedIntent,
+		}
+		if emit {
+			onStage(frame)
+		}
+		return frame
 	}
+
+	// --- 1) keyword first (fast path → first cards) ---
+	kwList, err := s.websites.Search(ctx, q, searchKeywordLimit)
+	if err != nil {
+		return nil, err
+	}
+	if kwList == nil {
+		kwList = []domain.Website{}
+	}
+	last := emitPartial(kwList, "keyword", false, false, false)
+
+	// Non-AI: keyword is the whole answer.
+	if !useAI || s.settings == nil {
+		last.Stage = "final"
+		if emit {
+			onStage(last)
+		}
+		slog.Info("search done", "q_len", len([]rune(q)), "ai", false, "kw", len(kwList), "out", len(last.Websites), "mode", last.Mode)
+		return &last, nil
+	}
+
+	// --- 2) vector + intent in parallel; push partial as each side lands ---
 	type vecRes struct {
 		sites  []domain.Website
 		scores map[int64]float64
@@ -108,92 +137,152 @@ func (s *PortalService) searchPipeline(ctx context.Context, q string, user *doma
 	}
 
 	var (
-		kwOut     kwRes
 		vecOut    vecRes
 		intentOut intentRes
 		wg        sync.WaitGroup
+		mu        sync.Mutex
 	)
+
+	// live fusion state under mu
+	vecSites := []domain.Website{}
+	vecScores := map[int64]float64{}
+	intentExtra := []domain.Website{}
+	usedVec, usedIntent := false, false
+
+	// Snapshot state and emit a partial frame (must not be called while holding mu).
+	pushFused := func() {
+		mu.Lock()
+		vs := append([]domain.Website(nil), vecSites...)
+		sc := make(map[int64]float64, len(vecScores))
+		for id, v := range vecScores {
+			sc[id] = v
+		}
+		ie := append([]domain.Website(nil), intentExtra...)
+		uv, ui := usedVec, usedIntent
+		mu.Unlock()
+
+		fused := fuseSearchCandidates(q, kwList, vs, sc, ie)
+		mode := searchMode(len(kwList) > 0, uv && len(vs) > 0, ui && len(ie) > 0)
+		frame := SearchResult{
+			Websites:   s.filterVisible(ctx, user, fused),
+			Query:      q,
+			Mode:       mode,
+			AI:         uv || ui,
+			Stage:      "partial",
+			UsedVector: uv,
+			UsedIntent: ui,
+		}
+		mu.Lock()
+		last = frame
+		mu.Unlock()
+		if emit {
+			onStage(frame)
+		}
+	}
 
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		list, err := s.websites.Search(ctx, q, searchKeywordLimit)
-		kwOut = kwRes{list: list, err: err}
+		vctx, cancel := context.WithTimeout(ctx, searchVectorTimeout)
+		defer cancel()
+		sites, scores, ok := s.recallVector(vctx, q)
+		if !ok || len(sites) == 0 {
+			return
+		}
+		sort.SliceStable(sites, func(i, j int) bool {
+			return scores[sites[i].ID] > scores[sites[j].ID]
+		})
+		// Batch so the UI grows in steps (legacy-like progressive).
+		for i := 0; i < len(sites); i += searchVectorBatchSize {
+			end := i + searchVectorBatchSize
+			if end > len(sites) {
+				end = len(sites)
+			}
+			mu.Lock()
+			vecSites = append([]domain.Website(nil), sites[:end]...)
+			vecScores = scores
+			usedVec = true
+			mu.Unlock()
+			pushFused()
+			if vctx.Err() != nil {
+				break
+			}
+		}
+		vecOut = vecRes{sites: sites, scores: scores, ok: true}
 	}()
 
-	if useAI && s.settings != nil {
+	if !short && shouldRunIntent(q) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			vctx, cancel := context.WithTimeout(ctx, searchVectorTimeout)
+			ictx, cancel := context.WithTimeout(ctx, searchIntentTimeout)
 			defer cancel()
-			sites, scores, ok := s.recallVector(vctx, q)
-			vecOut = vecRes{sites: sites, scores: scores, ok: ok}
+			intent, extra, ok := s.recallIntent(ictx, q)
+			if !ok {
+				return
+			}
+			mu.Lock()
+			intentOut = intentRes{intent: intent, extra: extra, ok: true}
+			intentExtra = extra
+			usedIntent = true
+			mu.Unlock()
+			pushFused()
 		}()
-
-		if !short && shouldRunIntent(q) {
-			wg.Add(1)
-			go func() {
-				defer wg.Done()
-				ictx, cancel := context.WithTimeout(ctx, searchIntentTimeout)
-				defer cancel()
-				intent, extra, ok := s.recallIntent(ictx, q)
-				intentOut = intentRes{intent: intent, extra: extra, ok: ok}
-			}()
-		}
 	}
 
 	wg.Wait()
-	if kwOut.err != nil {
-		return nil, kwOut.err
-	}
-	if kwOut.list == nil {
-		kwOut.list = []domain.Website{}
-	}
-	if vecOut.scores == nil {
-		vecOut.scores = map[int64]float64{}
-	}
 
-	// optional multi-query vector on top intent keywords (capped)
-	if useAI && intentOut.ok && intentOut.intent != nil {
-		extraVec, extraScores := s.recallVectorMultiQuery(ctx, intentOut.intent, vecOut.scores)
+	// multi-query vector on intent terms (after both settled)
+	mu.Lock()
+	intentSnap := intentOut
+	scoreSnap := make(map[int64]float64, len(vecScores))
+	for id, v := range vecScores {
+		scoreSnap[id] = v
+	}
+	mu.Unlock()
+	if intentSnap.ok && intentSnap.intent != nil {
+		extraVec, extraScores := s.recallVectorMultiQuery(ctx, intentSnap.intent, scoreSnap)
 		if len(extraVec) > 0 {
-			vecOut.sites = append(vecOut.sites, extraVec...)
-			if vecOut.scores == nil {
-				vecOut.scores = map[int64]float64{}
+			mu.Lock()
+			vecSites = append(vecSites, extraVec...)
+			if vecScores == nil {
+				vecScores = map[int64]float64{}
 			}
 			for id, sc := range extraScores {
-				if prev, ok := vecOut.scores[id]; !ok || sc > prev {
-					vecOut.scores[id] = sc
+				if prev, ok := vecScores[id]; !ok || sc > prev {
+					vecScores[id] = sc
 				}
 			}
-			vecOut.ok = true
+			usedVec = true
+			mu.Unlock()
+			pushFused()
 		}
 	}
 
-	fused := fuseSearchCandidates(q, kwOut.list, vecOut.sites, vecOut.scores, intentOut.extra)
-	mode := searchMode(len(kwOut.list) > 0, vecOut.ok && len(vecOut.sites) > 0, intentOut.ok && len(intentOut.extra) > 0)
+	mu.Lock()
+	fused := fuseSearchCandidates(q, kwList, vecSites, vecScores, intentExtra)
+	mode := searchMode(len(kwList) > 0, usedVec && len(vecSites) > 0, usedIntent && len(intentExtra) > 0)
+	intentPtr := intentOut.intent
+	uv, ui := usedVec, usedIntent
+	vecN, intentN := len(vecSites), len(intentExtra)
+	mu.Unlock()
 
-	initialList := s.filterVisible(ctx, user, fused)
-	initial := SearchResult{
-		Websites:   initialList,
+	last = SearchResult{
+		Websites:   s.filterVisible(ctx, user, fused),
 		Query:      q,
 		Mode:       mode,
-		AI:         useAI && (vecOut.ok || intentOut.ok),
-		Stage:      "initial",
-		UsedVector: vecOut.ok,
-		UsedIntent: intentOut.ok,
-	}
-	if onStage != nil {
-		onStage(initial)
+		AI:         uv || ui,
+		Stage:      "partial",
+		UsedVector: uv,
+		UsedIntent: ui,
 	}
 
-	// --- final: gated rerank ---
-	final := initial
+	// --- 3) final: gated rerank (reorder only) ---
+	final := last
 	final.Stage = "final"
-	if useAI && !short && len(fused) >= searchRerankMinCandidates {
+	if !short && len(fused) >= searchRerankMinCandidates {
 		rctx, cancel := context.WithTimeout(ctx, searchRerankTimeout)
-		ordered, summary, ok := s.refineRerank(rctx, q, fused, intentOut.intent)
+		ordered, summary, ok := s.refineRerank(rctx, q, fused, intentPtr)
 		cancel()
 		if ok && len(ordered) > 0 {
 			final.Websites = s.filterVisible(ctx, user, ordered)
@@ -207,21 +296,22 @@ func (s *PortalService) searchPipeline(ctx context.Context, q string, user *doma
 		}
 	}
 
-	if onStage != nil {
+	if emit {
 		onStage(final)
 	}
 
 	slog.Info("search done",
 		"q_len", len([]rune(q)),
 		"ai", useAI,
-		"kw", len(kwOut.list),
-		"vec", len(vecOut.sites),
-		"intent_extra", len(intentOut.extra),
+		"kw", len(kwList),
+		"vec", vecN,
+		"intent_extra", intentN,
 		"fused", len(fused),
 		"out", len(final.Websites),
 		"mode", final.Mode,
 		"refined", final.Refined,
 	)
+	_ = vecOut
 	return &final, nil
 }
 

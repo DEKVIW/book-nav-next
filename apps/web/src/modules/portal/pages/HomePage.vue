@@ -545,8 +545,8 @@ function scrollTop() {
     </div>
 
     <template v-else-if="!portal.loading || portal.categories.length">
-      <!-- 搜索结果 -->
-      <section v-if="portal.searchResults" class="search-layer">
+      <!-- 搜索结果：searchResults !== null 即进入（含空数组 loading，避免回车后无反应） -->
+      <section v-if="portal.searchResults !== null" class="search-layer">
         <header class="search-head">
           <div class="search-head__main">
             <span class="bay-header__icon bay-header__icon--magenta" aria-hidden="true">
@@ -566,7 +566,7 @@ function scrollTop() {
                   <span
                     v-if="portal.searchLoading"
                     class="search-chip search-chip--live"
-                  >优化中</span>
+                  >补充中</span>
                   <span
                     v-else-if="portal.searchMeta?.refined"
                     class="search-chip search-chip--ok"
@@ -581,10 +581,16 @@ function scrollTop() {
                 {{ portal.searchMeta.summary }}
               </p>
               <p
+                v-else-if="portal.searchLoading && !portal.searchResults.length"
+                class="search-head__summary search-head__summary--muted"
+              >
+                正在检索，结果会陆续出现…
+              </p>
+              <p
                 v-else-if="portal.searchLoading"
                 class="search-head__summary search-head__summary--muted"
               >
-                正在融合检索结果，稍后可能精排…
+                已显示初步结果，正在补充向量匹配与精排…
               </p>
             </div>
             <button
@@ -596,7 +602,8 @@ function scrollTop() {
             </button>
           </div>
         </header>
-        <div v-if="!portal.searchResults.length && portal.searchLoading" class="state">
+        <div v-if="!portal.searchResults.length && portal.searchLoading" class="state state--searching">
+          <span class="search-pulse" aria-hidden="true" />
           正在搜索…
         </div>
         <div v-else-if="!portal.searchResults.length" class="state">没有匹配的链接</div>
@@ -886,6 +893,20 @@ function scrollTop() {
 }
 .state.error {
   color: var(--danger);
+}
+.state--searching {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+}
+.search-pulse {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--magenta);
+  box-shadow: 0 0 12px rgba(179, 136, 255, 0.55);
+  animation: search-chip-pulse 1s ease-in-out infinite;
 }
 .featured {
   margin-bottom: 36px;

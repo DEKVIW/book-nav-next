@@ -64,17 +64,21 @@ export const usePortalStore = defineStore('portal', () => {
     },
   ) {
     if (seq !== searchSeq) return
+    // Server sends cumulative lists each frame; replace is correct (not append-dup).
     searchResults.value = data.websites || []
     searchMeta.value = {
       mode: data.mode,
       ai: data.ai,
       stage: data.stage,
-      summary: data.summary,
+      summary: data.summary ?? searchMeta.value?.summary,
       refined: data.refined,
     }
     if (data.stage === 'final' || data.stage === 'error') {
       searchLoading.value = false
       stopSearchStream()
+    } else {
+      // partial / initial / loading — keep spinner chip on
+      searchLoading.value = true
     }
   }
 
@@ -97,9 +101,10 @@ export const usePortalStore = defineStore('portal', () => {
   }
 
   /**
-   * Non-AI: one-shot JSON.
-   * AI: prefer two-stage SSE; on stream failure fall back to one-shot JSON (same pipeline final).
-   * searchSeq drops stale in-flight responses.
+   * Progressive search UX:
+   * - Enter → immediately open result layer (empty + loading), kill blank wait
+   * - AI SSE: keyword partial first, then vector batches, then final rerank
+   * - Non-AI / stream failure: one-shot JSON final
    */
   async function search(q: string, ai = false) {
     const query = q.trim()
@@ -112,6 +117,8 @@ export const usePortalStore = defineStore('portal', () => {
       searchLoading.value = false
       return
     }
+    // Instant shell: no “dead” gap before first paint
+    searchResults.value = []
     searchLoading.value = true
     searchMeta.value = { stage: 'loading' }
 
@@ -128,7 +135,6 @@ export const usePortalStore = defineStore('portal', () => {
       return
     }
 
-    // Progressive SSE; if proxy/middleware breaks the stream, fall back to JSON.
     let gotMessage = false
     try {
       await new Promise<void>((resolve, reject) => {
@@ -152,6 +158,8 @@ export const usePortalStore = defineStore('portal', () => {
           gotMessage = true
           try {
             const data = JSON.parse(ev.data) as SearchPayload
+            // tolerate legacy "initial" as partial
+            if (data.stage === 'initial') data.stage = 'partial'
             if (data.stage === 'error') {
               if (!searchResults.value) searchResults.value = []
               searchMeta.value = { stage: 'error' }
@@ -165,10 +173,9 @@ export const usePortalStore = defineStore('portal', () => {
           }
         }
         es.onerror = () => {
-          // Browser fires error when the stream closes after a normal final event,
-          // or when the connection never became SSE (e.g. JSON fallback from server).
           if (settled) return
-          if (gotMessage || (searchResults.value && seq === searchSeq)) {
+          // Stream closed after at least one frame → treat as success if we have cards
+          if (gotMessage || (searchResults.value && searchResults.value.length > 0)) {
             if (seq === searchSeq && searchMeta.value?.stage !== 'final') {
               searchMeta.value = { ...(searchMeta.value || {}), stage: 'final' }
             }
@@ -180,7 +187,6 @@ export const usePortalStore = defineStore('portal', () => {
       })
     } catch (e) {
       if (seq !== searchSeq) return
-      // No progressive frame received → one-shot AI JSON (full final pipeline).
       if (!gotMessage && !(searchResults.value && searchResults.value.length)) {
         try {
           searchLoading.value = true
@@ -193,6 +199,12 @@ export const usePortalStore = defineStore('portal', () => {
           searchLoading.value = false
           throw e2 instanceof Error ? e2 : e
         }
+      }
+      // Already have partial cards — keep them, don't toast hard failure
+      if (searchResults.value && searchResults.value.length > 0) {
+        searchLoading.value = false
+        searchMeta.value = { ...(searchMeta.value || {}), stage: 'final' }
+        return
       }
       throw e
     }
