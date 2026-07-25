@@ -1,0 +1,43 @@
+services:
+  booknav:
+    image: yilan666/booknav-next:${BOOKNAV_IMAGE_TAG:-latest}
+    container_name: booknav-next
+    restart: unless-stopped
+    ports:
+      - "${BOOKNAV_HOST_PORT:-8989}:8080"
+    volumes:
+      - ${BOOKNAV_DATA_DIR:-./data}:/data
+    environment:
+      BOOKNAV_ENV: production
+      BOOKNAV_HTTP_ADDR: ":8080"
+      BOOKNAV_DATA_DIR: /data
+      BOOKNAV_STATIC_DIR: /webdist
+      BOOKNAV_QDRANT_URL: http://qdrant:6333
+      BOOKNAV_ADMIN_USERNAME: ${BOOKNAV_ADMIN_USERNAME:-admin}
+      BOOKNAV_ADMIN_EMAIL: ${BOOKNAV_ADMIN_EMAIL:-admin@example.com}
+      BOOKNAV_ADMIN_PASSWORD: ${BOOKNAV_ADMIN_PASSWORD:-admin123}
+      BOOKNAV_SECRET_KEY: ${BOOKNAV_SECRET_KEY:-booknav-change-me-use-a-long-random-string}
+      BOOKNAV_COOKIE_SECURE: ${BOOKNAV_COOKIE_SECURE:-false}
+      BOOKNAV_ACCESS_LOG: ${BOOKNAV_ACCESS_LOG:-true}
+    depends_on:
+      - qdrant
+    networks:
+      - booknav_net
+
+  qdrant:
+    image: qdrant/qdrant:latest
+    container_name: booknav-qdrant
+    restart: unless-stopped
+    volumes:
+      - ${QDRANT_STORAGE_DIR:-./data/qdrant}:/qdrant/storage
+    ports:
+      - "${QDRANT_HOST_PORT:-127.0.0.1:6333}:6333"
+      - "${QDRANT_GRPC_HOST_PORT:-127.0.0.1:6334}:6334"
+    environment:
+      - QDRANT__SERVICE__GRPC_PORT=6334
+    networks:
+      - booknav_net
+
+networks:
+  booknav_net:
+    name: booknav_net
