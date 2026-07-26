@@ -19,6 +19,20 @@ let listenersBound = false
 
 const DELAY = 280
 
+function cancel() {
+  if (showTimer !== undefined) {
+    window.clearTimeout(showTimer)
+    showTimer = undefined
+  }
+}
+
+/** Module-level hide — used by listeners and exports (must exist before ensureListeners). */
+function hide() {
+  cancel()
+  visible.value = false
+  activeEl = null
+}
+
 function placeNear(el: HTMLElement) {
   const rect = el.getBoundingClientRect()
   // Detached or display:none → zero box; don't keep a floating tip
@@ -60,15 +74,16 @@ function onVisibility() {
   if (document.visibilityState === 'hidden') hide()
 }
 
+function onKeydown(e: KeyboardEvent) {
+  if (e.key === 'Escape') hide()
+}
+
 function ensureListeners() {
   if (listenersBound || typeof window === 'undefined') return
   window.addEventListener('scroll', onScrollOrResize, true)
   window.addEventListener('resize', onScrollOrResize)
-  // Capture phase so we clear even when navigation stops bubbling
   document.addEventListener('click', onDocClick, true)
-  document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape') hide()
-  })
+  document.addEventListener('keydown', onKeydown)
   document.addEventListener('visibilitychange', onVisibility)
   window.addEventListener('blur', hide)
   listenersBound = true
@@ -93,23 +108,10 @@ export function useCardTooltip() {
     }, DELAY)
   }
 
-  function hide() {
-    cancel()
-    visible.value = false
-    activeEl = null
-  }
-
   /** Only clear if this element owns the open tip (safe for list re-render unmount). */
   function hideIf(el: HTMLElement | null) {
     if (!el) return
     if (activeEl === el) hide()
-  }
-
-  function cancel() {
-    if (showTimer !== undefined) {
-      window.clearTimeout(showTimer)
-      showTimer = undefined
-    }
   }
 
   return {
@@ -125,12 +127,7 @@ export function useCardTooltip() {
   }
 }
 
-/** Imperative hide for router / layout (avoids importing reactive state only). */
+/** Imperative hide for router / layout. */
 export function hideCardTooltip() {
-  if (showTimer !== undefined) {
-    window.clearTimeout(showTimer)
-    showTimer = undefined
-  }
-  visible.value = false
-  activeEl = null
+  hide()
 }
