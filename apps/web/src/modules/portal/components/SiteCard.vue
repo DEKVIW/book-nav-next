@@ -1,8 +1,10 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, ref, watch, onBeforeUnmount } from 'vue'
 import type { Website } from '@/shared/types/models'
 import { useCardTooltip } from '@/shared/composables/useCardTooltip'
 import { skinForId } from '@/shared/mecha/skins'
+
+const rootEl = ref<HTMLElement | null>(null)
 
 const props = defineProps<{
   site: Website
@@ -57,10 +59,16 @@ function onEnter(e: MouseEvent) {
 function onLeave() {
   tip.hide()
 }
+
+// 本卡卸载时若 tip 挂在本卡上才收起（避免列表 diff 误伤其它卡的 tip）
+onBeforeUnmount(() => {
+  tip.hideIf(rootEl.value)
+})
 </script>
 
 <template>
   <a
+    ref="rootEl"
     class="site-card hull"
     :class="{ 'site-card--drag': draggable }"
     :href="site.url"

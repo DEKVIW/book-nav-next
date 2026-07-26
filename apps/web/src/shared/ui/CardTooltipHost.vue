@@ -1,12 +1,22 @@
 <script setup lang="ts">
-import { useCardTooltip } from '@/shared/composables/useCardTooltip'
+import { watch } from 'vue'
+import { useRoute } from 'vue-router'
+import { useCardTooltip, hideCardTooltip } from '@/shared/composables/useCardTooltip'
 
 const { visible, text, title, x, y } = useCardTooltip()
+const route = useRoute()
+
+// SPA 路由切换时前台卡片会卸载，mouseleave 不一定触发 → 必须清全局 tip
+watch(
+  () => route.fullPath,
+  () => hideCardTooltip(),
+)
 </script>
 
 <template>
   <Teleport to="body">
     <div
+      v-show="visible"
       class="m-tooltip hull"
       :class="{ 'is-visible': visible }"
       :style="{ left: `${x}px`, top: `${y}px` }"

@@ -3,6 +3,9 @@ import { ref } from 'vue'
 /**
  * 全局单例 Tooltip 状态（所有卡片共享）。
  * Host 组件负责 Teleport 渲染。
+ *
+ * 必须在路由切换 / 页面隐藏 / 目标节点卸载时 hide，
+ * 否则会出现「进后台后前台 tip 残留在 body 上」的幽灵气泡。
  */
 const visible = ref(false)
 const text = ref('')
@@ -18,6 +21,11 @@ const DELAY = 280
 
 function placeNear(el: HTMLElement) {
   const rect = el.getBoundingClientRect()
+  // Detached or display:none → zero box; don't keep a floating tip
+  if (rect.width === 0 && rect.height === 0) {
+    hide()
+    return
+  }
   const pad = 10
   const maxW = Math.min(300, window.innerWidth - 24)
   let left = rect.left + rect.width / 2 - maxW / 2
@@ -33,13 +41,36 @@ function placeNear(el: HTMLElement) {
 }
 
 function onScrollOrResize() {
-  if (visible.value && activeEl) placeNear(activeEl)
+  if (!visible.value || !activeEl) return
+  if (!activeEl.isConnected) {
+    hide()
+    return
+  }
+  placeNear(activeEl)
+}
+
+function onDocClick(e: Event) {
+  if (!visible.value && showTimer === undefined) return
+  const t = e.target as Node | null
+  if (activeEl && t && activeEl.contains(t)) return
+  hide()
+}
+
+function onVisibility() {
+  if (document.visibilityState === 'hidden') hide()
 }
 
 function ensureListeners() {
   if (listenersBound || typeof window === 'undefined') return
   window.addEventListener('scroll', onScrollOrResize, true)
   window.addEventListener('resize', onScrollOrResize)
+  // Capture phase so we clear even when navigation stops bubbling
+  document.addEventListener('click', onDocClick, true)
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') hide()
+  })
+  document.addEventListener('visibilitychange', onVisibility)
+  window.addEventListener('blur', hide)
   listenersBound = true
 }
 
@@ -51,7 +82,10 @@ export function useCardTooltip() {
     if (!tip.trim()) return
     activeEl = el
     showTimer = window.setTimeout(() => {
-      if (!activeEl) return
+      if (!activeEl || !activeEl.isConnected) {
+        hide()
+        return
+      }
       text.value = tip
       title.value = tipTitle
       placeNear(activeEl)
@@ -63,6 +97,12 @@ export function useCardTooltip() {
     cancel()
     visible.value = false
     activeEl = null
+  }
+
+  /** Only clear if this element owns the open tip (safe for list re-render unmount). */
+  function hideIf(el: HTMLElement | null) {
+    if (!el) return
+    if (activeEl === el) hide()
   }
 
   function cancel() {
@@ -80,6 +120,17 @@ export function useCardTooltip() {
     y,
     scheduleShow,
     hide,
+    hideIf,
     cancel,
   }
+}
+
+/** Imperative hide for router / layout (avoids importing reactive state only). */
+export function hideCardTooltip() {
+  if (showTimer !== undefined) {
+    window.clearTimeout(showTimer)
+    showTimer = undefined
+  }
+  visible.value = false
+  activeEl = null
 }
