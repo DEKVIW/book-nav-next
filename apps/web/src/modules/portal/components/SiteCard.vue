@@ -9,6 +9,8 @@ const rootEl = ref<HTMLElement | null>(null)
 const props = defineProps<{
   site: Website
   draggable?: boolean
+  isLocated?: boolean
+  isLocating?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -70,7 +72,11 @@ onBeforeUnmount(() => {
   <a
     ref="rootEl"
     class="site-card hull"
-    :class="{ 'site-card--drag': draggable }"
+    :class="{
+      'site-card--drag': draggable,
+      'site-card--located': isLocated,
+      'site-card--locating': isLocating,
+    }"
     :href="site.url"
     :data-id="site.id"
     :data-skin="skin.id"
@@ -166,6 +172,45 @@ onBeforeUnmount(() => {
 }
 .site-card:active {
   filter: brightness(0.98);
+}
+.site-card--located {
+  border-color: var(--energy);
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--energy) 70%, transparent),
+    0 8px 28px rgba(0, 0, 0, 0.45),
+    0 0 30px color-mix(in srgb, var(--energy) 24%, transparent);
+}
+.site-card--located::before {
+  content: '';
+  position: absolute;
+  z-index: 3;
+  left: 0;
+  top: 12px;
+  bottom: 12px;
+  width: 3px;
+  background: var(--energy);
+  box-shadow: 0 0 14px color-mix(in srgb, var(--energy) 70%, transparent);
+}
+.site-card--located .hull-corners span {
+  border-color: var(--energy);
+}
+.site-card--locating {
+  animation: site-card-locate-pulse 0.8s ease-in-out 4;
+}
+@keyframes site-card-locate-pulse {
+  50% {
+    border-color: var(--energy);
+    box-shadow:
+      0 0 0 1px color-mix(in srgb, var(--energy) 85%, transparent),
+      0 8px 28px rgba(0, 0, 0, 0.45),
+      0 0 42px color-mix(in srgb, var(--energy) 36%, transparent);
+    filter: brightness(1.12);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .site-card--locating {
+    animation: none;
+  }
 }
 
 /* TOP-RIGHT action art — absolute, no layout size */

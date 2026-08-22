@@ -46,6 +46,9 @@ const pendingForceUrl = ref('')
 const dragState = ref<{ catId: number; ids: number[] } | null>(null)
 const showTop = ref(false)
 const useAI = ref(false)
+const locatedSiteId = ref<number | null>(null)
+const locatingSiteId = ref<number | null>(null)
+let locatePulseTimer: number | undefined
 
 const displayCategories = computed(() => portal.categories)
 
@@ -155,6 +158,7 @@ async function selectTab(cat: Category, tab: number | 'root') {
 async function onSidebarSubcategory(parentId: number, childId: number | 'root') {
   const cat = portal.categories.find((c) => c.id === parentId)
   if (!cat) return
+  clearLocatedSite()
   await selectTab(cat, childId)
 }
 
@@ -169,6 +173,70 @@ function initTabs() {
       sectionSitesCache.value[cat.id] = cat.websites || []
     }
   }
+}
+
+function clearLocatedSite() {
+  if (locatePulseTimer) {
+    window.clearTimeout(locatePulseTimer)
+    locatePulseTimer = undefined
+  }
+  locatedSiteId.value = null
+  locatingSiteId.value = null
+}
+
+function pulseLocatedSite(siteId: number) {
+  if (locatePulseTimer) {
+    window.clearTimeout(locatePulseTimer)
+  }
+  locatedSiteId.value = siteId
+  locatingSiteId.value = siteId
+  locatePulseTimer = window.setTimeout(() => {
+    if (locatingSiteId.value === siteId) {
+      locatingSiteId.value = null
+    }
+    locatePulseTimer = undefined
+  }, 3200)
+}
+
+function findCategoryLocation(site: Website): { parent: Category; tab: number | 'root' } | null {
+  if (!site.category_id) return null
+  for (const cat of portal.categories) {
+    if (cat.id === site.category_id) {
+      return { parent: cat, tab: 'root' }
+    }
+    const child = cat.children?.find((c) => c.id === site.category_id)
+    if (child) {
+      return { parent: cat, tab: child.id }
+    }
+  }
+  return null
+}
+
+async function locateExistingSite(site: Website) {
+  portal.clearSearch()
+  await nextTick()
+
+  const location = findCategoryLocation(site)
+  let card: HTMLElement | null = null
+
+  if (location) {
+    await selectTab(location.parent, location.tab)
+    await expandCategory(location.parent)
+    await nextTick()
+
+    const section = document.getElementById(`cat-${location.parent.id}`)
+    card = section?.querySelector(`[data-id="${site.id}"]`) as HTMLElement | null
+    if (!card) {
+      section?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    }
+  }
+
+  card = card || (document.querySelector(`[data-id="${site.id}"]`) as HTMLElement | null)
+  if (!card) return false
+
+  card.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'nearest' })
+  pulseLocatedSite(site.id)
+  return true
 }
 
 watch(
@@ -194,6 +262,9 @@ onMounted(async () => {
 onUnmounted(() => {
   window.removeEventListener('paste', onPaste)
   window.removeEventListener('scroll', onScroll)
+  if (locatePulseTimer) {
+    window.clearTimeout(locatePulseTimer)
+  }
 })
 
 function isValidUrl(text: string) {
@@ -217,6 +288,7 @@ async function onPaste(e: ClipboardEvent) {
 }
 
 async function startQuickAdd(url: string) {
+  clearLocatedSite()
   formMode.value = 'create'
   formSite.value = null
   formUrl.value = url
@@ -290,44 +362,12 @@ async function onDupForceSkipCheck() {
   }
 }
 
-function onDupView() {
+async function onDupView() {
   dupOpen.value = false
   const w = dupSite.value
   if (!w) return
-  // 定位分类：优先 category_id
-  if (w.category_id) {
-    // 可能是子分类：找到父级
-    let parentId = w.category_id
-    let childTab: number | 'root' = 'root'
-    for (const cat of portal.categories) {
-      if (cat.id === w.category_id) {
-        parentId = cat.id
-        childTab = 'root'
-        break
-      }
-      const ch = cat.children?.find((c) => c.id === w.category_id)
-      if (ch) {
-        parentId = cat.id
-        childTab = ch.id
-        break
-      }
-    }
-    const parent = portal.categories.find((c) => c.id === parentId)
-    if (parent) {
-      selectTab(parent, childTab).then(() => {
-        expandCategory(parent).then(() => {
-          document.getElementById(`cat-${parentId}`)?.scrollIntoView({ behavior: 'smooth' })
-          // 高亮卡片
-          nextTick(() => {
-            const card = document.querySelector(`[data-id="${w.id}"]`) as HTMLElement | null
-            card?.classList.add('site-card--highlight')
-            setTimeout(() => card?.classList.remove('site-card--highlight'), 2000)
-          })
-        })
-      })
-    }
-  }
-  toast.info('已定位到已有链接')
+  const located = await locateExistingSite(w)
+  toast.info(located ? '已定位到已有链接' : '已找到已有链接，但当前视图未能定位到卡片')
 }
 
 async function onFormSubmit(payload: Record<string, unknown>) {
@@ -514,6 +554,7 @@ async function onFormEnhance(payload: { url: string; title: string; description:
 
 async function onSearch(q: string) {
   try {
+    clearLocatedSite()
     await portal.search(q, useAI.value && aiAvailable.value)
   } catch (err: unknown) {
     toast.error(err instanceof Error ? err.message : '搜索失败')
@@ -612,6 +653,8 @@ function scrollTop() {
             v-for="site in portal.searchResults"
             :key="site.id"
             :site="site"
+            :is-located="locatedSiteId === site.id"
+            :is-locating="locatingSiteId === site.id"
             @open="openSite"
             @context="onContext"
           />
@@ -633,6 +676,8 @@ function scrollTop() {
               v-for="site in portal.featured"
               :key="'f' + site.id"
               :site="site"
+              :is-located="locatedSiteId === site.id"
+              :is-locating="locatingSiteId === site.id"
               @open="openSite"
               @context="onContext"
             />
@@ -691,6 +736,8 @@ function scrollTop() {
               :key="site.id"
               :site="site"
               :draggable="auth.isAdmin"
+              :is-located="locatedSiteId === site.id"
+              :is-locating="locatingSiteId === site.id"
               @open="openSite"
               @context="onContext"
               @dragstart="(e: DragEvent) => onDragStart(cat, site, e)"
@@ -949,9 +996,5 @@ function scrollTop() {
 }
 .back-top__icon {
   transform: rotate(180deg);
-}
-:deep(.site-card--highlight) {
-  border-color: var(--energy) !important;
-  box-shadow: var(--glow-md) !important;
 }
 </style>
