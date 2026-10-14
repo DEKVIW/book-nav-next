@@ -19,15 +19,16 @@ import (
 )
 
 type Deps struct {
-	Config     *config.Config
-	Auth       *service.AuthService
-	Portal     *service.PortalService
-	Websites   *service.WebsiteService
-	Categories *service.CategoryService
-	Admin      *service.AdminService
-	Settings   *service.SettingsService
-	Jobs       *service.JobService
-	DB         *sql.DB
+	Config       *config.Config
+	Auth         *service.AuthService
+	Portal       *service.PortalService
+	Websites     *service.WebsiteService
+	Categories   *service.CategoryService
+	Admin        *service.AdminService
+	Settings     *service.SettingsService
+	Jobs         *service.JobService
+	SearchShares *service.SearchShareService
+	DB           *sql.DB
 }
 
 func NewRouter(d Deps) http.Handler {
@@ -81,6 +82,7 @@ func NewRouter(d Deps) http.Handler {
 	authH := NewAuthHandler(d.Auth, cfg.CookieSecureMode())
 	portalH := NewPortalHandler(d.Portal, d.Websites, d.Categories, d.Jobs)
 	adminH := NewAdminHandler(d.Admin, d.Websites, d.Categories, d.Settings, d.Jobs)
+	searchShareH := NewSearchShareHandler(d.SearchShares)
 
 	r.Route("/api/v1", func(api chi.Router) {
 		api.Use(authMW.CSRF)
@@ -125,6 +127,11 @@ func NewRouter(d Deps) http.Handler {
 			})
 		})
 
+		api.Route("/shares", func(sr chi.Router) {
+			sr.Get("/{token}", searchShareH.GetPublic)
+		})
+		api.Post("/shares", searchShareH.Create)
+
 		// admin
 		api.Route("/admin", func(ar chi.Router) {
 			ar.Use(authMW.RequireAuth)
@@ -154,6 +161,10 @@ func NewRouter(d Deps) http.Handler {
 			ar.Post("/jobs/{id}/cancel", adminH.CancelJob)
 			ar.Delete("/jobs/{id}", adminH.DeleteJob)
 			ar.Post("/jobs/clear", adminH.ClearJobs)
+			ar.Post("/shares", searchShareH.Create)
+			ar.Get("/shares", searchShareH.List)
+			ar.Post("/shares/{id}/revoke", searchShareH.Revoke)
+			ar.Delete("/shares/{id}", searchShareH.Delete)
 
 			ar.Group(func(sr chi.Router) {
 				sr.Use(authMW.RequireSuper)

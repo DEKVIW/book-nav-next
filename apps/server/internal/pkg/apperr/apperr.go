@@ -10,6 +10,7 @@ const (
 	Forbidden    Code = "FORBIDDEN"
 	NotFound     Code = "NOT_FOUND"
 	Conflict     Code = "CONFLICT"
+	RateLimited  Code = "RATE_LIMITED"
 	Internal     Code = "INTERNAL"
 )
 

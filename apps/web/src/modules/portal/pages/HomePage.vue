@@ -13,6 +13,7 @@ import ContextMenu from '@/modules/portal/components/ContextMenu.vue'
 import WebsiteFormModal from '@/modules/portal/components/WebsiteFormModal.vue'
 import DuplicateDialog from '@/modules/portal/components/DuplicateDialog.vue'
 import AnnouncementModal from '@/modules/portal/components/AnnouncementModal.vue'
+import SearchShareDialog from '@/modules/portal/components/SearchShareDialog.vue'
 import AppIcon from '@/shared/ui/AppIcon.vue'
 import { iconForCategory } from '@/shared/icons/registry'
 import { useAuthStore } from '@/shared/stores/auth'
@@ -46,6 +47,7 @@ const pendingForceUrl = ref('')
 const dragState = ref<{ categoryId: number; draggedId: number; ids: number[] } | null>(null)
 const showTop = ref(false)
 const useAI = ref(false)
+const shareDialogOpen = ref(false)
 const locatedSiteId = ref<number | null>(null)
 const locatingSiteId = ref<number | null>(null)
 let locatePulseTimer: number | undefined
@@ -661,6 +663,12 @@ async function onSearch(q: string) {
   }
 }
 
+function openSearchShare() {
+  const guestShareEnabled = !!portal.settings?.guest_share_enabled
+  if ((!auth.isAdmin && !guestShareEnabled) || !portal.searchResults?.length || portal.searchLoading) return
+  shareDialogOpen.value = true
+}
+
 function scrollTop() {
   window.scrollTo({ top: 0, behavior: 'smooth' })
 }
@@ -734,6 +742,16 @@ function scrollTop() {
                 已显示初步结果，正在补充向量匹配与精排…
               </p>
             </div>
+            <button
+              v-if="(auth.isAdmin || portal.settings?.guest_share_enabled) && portal.searchResults.length && !portal.searchLoading"
+              type="button"
+              class="m-btn m-btn--ghost search-head__share"
+              title="分享搜索结果"
+              @click="openSearchShare"
+            >
+              <AppIcon name="link" :size="15" />
+              <span>分享</span>
+            </button>
             <button
               type="button"
               class="m-btn m-btn--ghost search-head__back"
@@ -882,6 +900,18 @@ function scrollTop() {
       @enhance="onFormEnhance"
     />
 
+    <SearchShareDialog
+      :open="shareDialogOpen"
+      :query="portal.searchQuery"
+      :mode="useAI && portal.searchMeta?.ai ? 'ai' : 'keyword'"
+      :summary="portal.searchMeta?.summary"
+      :websites="portal.searchResults || []"
+      :is-admin="auth.isAdmin"
+      :guest-max-days="portal.settings?.guest_share_max_days || 7"
+      :guest-max-items="portal.settings?.guest_share_max_items || 20"
+      @close="shareDialogOpen = false"
+    />
+
     <DuplicateDialog
       :open="dupOpen"
       :website="dupSite"
@@ -1020,6 +1050,14 @@ function scrollTop() {
   height: 34px !important;
   letter-spacing: 0.04em;
 }
+.search-head__share {
+  flex-shrink: 0;
+  align-self: flex-start;
+  height: 34px !important;
+  gap: 6px;
+  color: var(--energy);
+  border-color: color-mix(in srgb, var(--energy) 34%, var(--stroke-dim));
+}
 @keyframes search-chip-pulse {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.72; }
@@ -1031,6 +1069,9 @@ function scrollTop() {
   .search-head__back {
     margin-left: 0;
     width: 100%;
+  }
+  .search-head__share {
+    margin-left: auto;
   }
   .search-chip--query {
     max-width: min(70vw, 220px);

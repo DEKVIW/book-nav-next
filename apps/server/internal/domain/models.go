@@ -58,29 +58,29 @@ type Category struct {
 	CreatedAt    time.Time  `json:"created_at"`
 	Children     []Category `json:"children,omitempty"`
 	// Aggregates
-	DirectCount           int       `json:"direct_count,omitempty"`
-	TotalCountWithChildren int      `json:"total_count_with_children,omitempty"`
-	WebsiteCount          int       `json:"website_count,omitempty"`
-	Websites              []Website `json:"websites,omitempty"`
-	DisplayedSubcategoryID *int64   `json:"displayed_subcategory_id,omitempty"`
+	DirectCount            int       `json:"direct_count,omitempty"`
+	TotalCountWithChildren int       `json:"total_count_with_children,omitempty"`
+	WebsiteCount           int       `json:"website_count,omitempty"`
+	Websites               []Website `json:"websites,omitempty"`
+	DisplayedSubcategoryID *int64    `json:"displayed_subcategory_id,omitempty"`
 }
 
 type Website struct {
-	ID          int64      `json:"id"`
-	Title       string     `json:"title"`
-	URL         string     `json:"url"`
-	Description string     `json:"description,omitempty"`
-	Icon        string     `json:"icon,omitempty"`
-	CategoryID  *int64     `json:"category_id,omitempty"`
-	CreatedBy   int64      `json:"created_by"`
-	IsFeatured  bool       `json:"is_featured"`
-	IsPrivate   bool       `json:"is_private"`
-	SortOrder   int        `json:"sort_order"`
-	Views       int64      `json:"views"`
-	IsValid     bool       `json:"is_valid"`
-	CreatedAt   time.Time  `json:"created_at"`
-	UpdatedAt   time.Time  `json:"updated_at"`
-	ViewerIDs   []int64    `json:"viewer_ids,omitempty"`
+	ID           int64     `json:"id"`
+	Title        string    `json:"title"`
+	URL          string    `json:"url"`
+	Description  string    `json:"description,omitempty"`
+	Icon         string    `json:"icon,omitempty"`
+	CategoryID   *int64    `json:"category_id,omitempty"`
+	CreatedBy    int64     `json:"created_by"`
+	IsFeatured   bool      `json:"is_featured"`
+	IsPrivate    bool      `json:"is_private"`
+	SortOrder    int       `json:"sort_order"`
+	Views        int64     `json:"views"`
+	IsValid      bool      `json:"is_valid"`
+	CreatedAt    time.Time `json:"created_at"`
+	UpdatedAt    time.Time `json:"updated_at"`
+	ViewerIDs    []int64   `json:"viewer_ids,omitempty"`
 	CategoryName string    `json:"category_name,omitempty"`
 }
 
@@ -132,28 +132,31 @@ type DeadlinkCheck struct {
 
 // PublicSettings is safe to expose to portal.
 type PublicSettings struct {
-	SiteName              string `json:"site_name"`
-	SiteSubtitle          string `json:"site_subtitle,omitempty"`
-	SiteLogo              string `json:"site_logo,omitempty"`
-	SiteFavicon           string `json:"site_favicon,omitempty"`
-	FooterContent         string `json:"footer_content,omitempty"`
-	AISearchEnabled       bool   `json:"ai_search_enabled"`
-	AIAllowAnon           bool   `json:"ai_search_allow_anonymous"`
-	EnableTransition      bool   `json:"enable_transition"`
-	TransitionTime        int    `json:"transition_time"`
-	AdminTransition       int    `json:"admin_transition_time"`
-	TransitionRemember    bool   `json:"transition_remember_choice"`
-	TransitionShowDesc    bool   `json:"transition_show_description"`
-	TransitionTheme       string `json:"transition_theme,omitempty"`
-	TransitionColor       string `json:"transition_color,omitempty"`
-	TransitionAd1         string `json:"transition_ad1,omitempty"`
-	TransitionAd2         string `json:"transition_ad2,omitempty"`
-	AnnouncementOn        bool   `json:"announcement_enabled"`
-	AnnouncementTitle     string `json:"announcement_title,omitempty"`
-	AnnouncementContent   string `json:"announcement_content,omitempty"`
-	AnnouncementStart     string `json:"announcement_start,omitempty"`
-	AnnouncementEnd       string `json:"announcement_end,omitempty"`
-	AnnouncementRemember  int    `json:"announcement_remember_days"`
+	SiteName             string `json:"site_name"`
+	SiteSubtitle         string `json:"site_subtitle,omitempty"`
+	SiteLogo             string `json:"site_logo,omitempty"`
+	SiteFavicon          string `json:"site_favicon,omitempty"`
+	FooterContent        string `json:"footer_content,omitempty"`
+	AISearchEnabled      bool   `json:"ai_search_enabled"`
+	AIAllowAnon          bool   `json:"ai_search_allow_anonymous"`
+	GuestShareEnabled    bool   `json:"guest_share_enabled"`
+	GuestShareMaxDays    int    `json:"guest_share_max_days"`
+	GuestShareMaxItems   int    `json:"guest_share_max_items"`
+	EnableTransition     bool   `json:"enable_transition"`
+	TransitionTime       int    `json:"transition_time"`
+	AdminTransition      int    `json:"admin_transition_time"`
+	TransitionRemember   bool   `json:"transition_remember_choice"`
+	TransitionShowDesc   bool   `json:"transition_show_description"`
+	TransitionTheme      string `json:"transition_theme,omitempty"`
+	TransitionColor      string `json:"transition_color,omitempty"`
+	TransitionAd1        string `json:"transition_ad1,omitempty"`
+	TransitionAd2        string `json:"transition_ad2,omitempty"`
+	AnnouncementOn       bool   `json:"announcement_enabled"`
+	AnnouncementTitle    string `json:"announcement_title,omitempty"`
+	AnnouncementContent  string `json:"announcement_content,omitempty"`
+	AnnouncementStart    string `json:"announcement_start,omitempty"`
+	AnnouncementEnd      string `json:"announcement_end,omitempty"`
+	AnnouncementRemember int    `json:"announcement_remember_days"`
 }
 
 type HomeData struct {

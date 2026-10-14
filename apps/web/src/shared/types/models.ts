@@ -52,6 +52,9 @@ export interface PublicSettings {
   footer_content?: string
   ai_search_enabled: boolean
   ai_search_allow_anonymous: boolean
+  guest_share_enabled: boolean
+  guest_share_max_days: number
+  guest_share_max_items: number
   enable_transition: boolean
   transition_time: number
   admin_transition_time: number
