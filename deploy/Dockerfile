@@ -1,8 +1,8 @@
 # syntax=docker/dockerfile:1
 
 # VERSION is baked into the binary (About page /api/v1/version).
-# Local/dev default keeps -dev; Hub/prod builds should pass e.g. --build-arg VERSION=0.1.0
-ARG VERSION=0.1.0-dev
+# Local/dev default keeps -dev; Hub/prod builds should pass the release version.
+ARG VERSION=0.2.0-dev
 
 # —— Frontend ——
 FROM node:22-alpine AS web-build
@@ -14,7 +14,7 @@ RUN npm run build
 
 # —— Backend ——
 FROM golang:1.23-alpine AS server-build
-ARG VERSION=0.1.0-dev
+ARG VERSION=0.2.0-dev
 WORKDIR /src/server
 RUN apk add --no-cache git ca-certificates
 COPY apps/server/go.mod apps/server/go.sum ./

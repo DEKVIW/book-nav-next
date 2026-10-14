@@ -6,4 +6,4 @@ package version
 //
 // Defaults to a -dev label for local go run / untagged builds.
 // Production Docker Hub images should pass VERSION without -dev (e.g. 0.1.0).
-var Version = "0.1.0-dev"
+var Version = "0.2.0-dev"
