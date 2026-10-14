@@ -68,4 +68,8 @@ h2 {
   gap: 8px;
   margin-top: 16px;
 }
+
+:global(html[data-theme='light']) .mask {
+  background: rgba(44, 78, 91, 0.28);
+}
 </style>

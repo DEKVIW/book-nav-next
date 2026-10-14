@@ -10,6 +10,7 @@ import { useAuthStore } from '@/shared/stores/auth'
 import { usePortalStore } from '@/shared/stores/portal'
 import { useToast } from '@/shared/composables/useToast'
 import AppIcon from '@/shared/ui/AppIcon.vue'
+import ThemeMenu from '@/shared/ui/ThemeMenu.vue'
 import { iconForCategory } from '@/shared/icons/registry'
 import type { Category } from '@/shared/types/models'
 
@@ -458,6 +459,7 @@ defineExpose({
           <input v-model="aiOn" type="checkbox" />
           <span>AI</span>
         </label>
+        <ThemeMenu />
         <template v-if="auth.isLoggedIn">
           <span class="user-chip">
             <span class="status-dot status-dot--ok" />

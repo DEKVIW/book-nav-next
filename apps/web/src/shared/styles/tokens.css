@@ -14,6 +14,23 @@
   --bg-inset: #070e16;
   --bg-input: #0a1420;
 
+  /* Atmosphere layers */
+  --mecha-bg-image:
+    radial-gradient(ellipse 90% 55% at 50% -8%, rgba(40, 100, 170, 0.2), transparent 58%),
+    radial-gradient(ellipse 50% 40% at 12% 88%, rgba(30, 90, 140, 0.1), transparent 55%),
+    radial-gradient(ellipse 45% 35% at 92% 80%, rgba(90, 50, 150, 0.08), transparent 50%),
+    linear-gradient(rgba(90, 150, 210, 0.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(90, 150, 210, 0.035) 1px, transparent 1px);
+  --mecha-vignette:
+    radial-gradient(ellipse 78% 72% at 50% 40%, transparent 18%, rgba(4, 8, 14, 0.5) 100%),
+    linear-gradient(180deg, rgba(5, 10, 18, 0.2) 0%, transparent 28%, rgba(5, 10, 18, 0.4) 100%);
+  --mecha-sky-vignette:
+    radial-gradient(ellipse 80% 75% at 50% 38%, transparent 22%, rgba(4, 8, 14, 0.42) 100%),
+    linear-gradient(180deg, rgba(5, 10, 18, 0.15) 0%, transparent 30%, rgba(5, 10, 18, 0.35) 100%);
+  --mecha-surface-highlight: rgba(255, 255, 255, 0.04);
+  --mecha-surface-shadow: rgba(0, 0, 0, 0.35);
+  --mecha-mask: rgba(2, 6, 12, 0.72);
+
   /* Structure strokes */
   --stroke-dim: rgba(90, 130, 170, 0.22);
   --stroke-mid: rgba(100, 150, 200, 0.38);
@@ -90,6 +107,55 @@
   --z-modal: 800;
   --z-tooltip: 900;
   --z-toast: 1000;
+}
+
+[data-theme='light'] {
+  /* Daylight command deck: cool steel, cloud haze and controlled cyan energy. */
+  --bg-void: #e8f0f3;
+  --bg-hull: #eef4f6;
+  --bg-panel: #f5f9fa;
+  --bg-panel-solid: #f5f9fa;
+  --bg-panel-elevated: #ffffff;
+  --bg-inset: #dfeaed;
+  --bg-input: #edf4f6;
+
+  --mecha-bg-image:
+    radial-gradient(ellipse 90% 58% at 52% -12%, rgba(255, 255, 255, 0.78), transparent 58%),
+    radial-gradient(ellipse 52% 40% at 10% 88%, rgba(89, 164, 190, 0.12), transparent 58%),
+    radial-gradient(ellipse 50% 36% at 92% 74%, rgba(241, 185, 96, 0.1), transparent 54%),
+    linear-gradient(rgba(64, 112, 132, 0.028) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(64, 112, 132, 0.028) 1px, transparent 1px);
+  --mecha-vignette:
+    radial-gradient(ellipse 80% 76% at 50% 38%, transparent 24%, rgba(50, 89, 103, 0.14) 100%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.12) 0%, transparent 28%, rgba(53, 97, 111, 0.08) 100%);
+  --mecha-sky-vignette:
+    radial-gradient(ellipse 82% 78% at 50% 38%, transparent 26%, rgba(50, 89, 103, 0.1) 100%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.1) 0%, transparent 30%, rgba(53, 97, 111, 0.06) 100%);
+  --mecha-surface-highlight: rgba(255, 255, 255, 0.72);
+  --mecha-surface-shadow: rgba(44, 78, 91, 0.1);
+  --mecha-mask: rgba(28, 54, 64, 0.42);
+
+  --stroke-dim: rgba(45, 79, 96, 0.18);
+  --stroke-mid: rgba(45, 79, 96, 0.32);
+  --stroke-bright: rgba(8, 126, 152, 0.52);
+  --stroke-active: #087e98;
+
+  --energy: #087e98;
+  --energy-dim: rgba(8, 126, 152, 0.28);
+  --energy-glow: rgba(8, 126, 152, 0.14);
+  --amber: #9a5a00;
+  --amber-dim: rgba(154, 90, 0, 0.26);
+  --magenta: #7549a2;
+  --success: #08784f;
+  --danger: #b12c3b;
+  --private: #9a5a00;
+
+  --text-primary: #1b2b34;
+  --text-secondary: #4c6570;
+  --text-muted: #6f858d;
+
+  --panel-shadow: 0 12px 34px rgba(38, 72, 86, 0.14), inset 0 1px 0 rgba(255, 255, 255, 0.8);
+  --inset-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.78), inset 0 -1px 0 rgba(40, 74, 87, 0.08);
 }
 
 @media (prefers-reduced-motion: reduce) {

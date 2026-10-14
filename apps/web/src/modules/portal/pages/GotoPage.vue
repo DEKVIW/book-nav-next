@@ -11,10 +11,12 @@ import { useRoute, RouterLink } from 'vue-router'
 import { apiPost } from '@/shared/api/client'
 import type { Website } from '@/shared/types/models'
 import SpaceSky from '@/shared/ui/SpaceSky.vue'
+import { useTheme } from '@/shared/composables/useTheme'
 
 const SKIP_KEY = 'booknav_skip_transition'
 
 const route = useRoute()
+const { resolved } = useTheme()
 const site = ref<Website | null>(null)
 const views = ref<number | null>(null)
 const countdown = ref(0)
@@ -148,7 +150,7 @@ onUnmounted(() => {
 
 <template>
   <div class="warp" :style="{ '--warp-accent': themeColor }" :class="{ 'warp--launch': jumping }">
-    <SpaceSky intensity="full" />
+    <SpaceSky intensity="full" :theme="resolved" />
 
     <main class="stage">
       <div class="bay">
@@ -418,8 +420,8 @@ onUnmounted(() => {
   border-radius: 10px;
   font-size: 13px;
   line-height: 1.55;
-  color: #8fa6c2;
-  background: rgba(5, 12, 22, 0.45);
+  color: #bfd2e6;
+  background: rgba(5, 12, 22, 0.72);
   border: 1px solid rgba(90, 130, 170, 0.14);
   max-height: 96px;
   overflow: auto;
@@ -611,6 +613,86 @@ onUnmounted(() => {
   color: #5c7390;
   text-align: center;
   padding: 28px;
+}
+
+:global(html[data-theme='light']) .warp {
+  background: #dbe7e8;
+  color: var(--text-primary);
+}
+
+:global(html[data-theme='light']) .bay {
+  background: linear-gradient(165deg, rgba(250, 253, 253, 0.9), rgba(231, 241, 241, 0.88));
+  border-color: color-mix(in srgb, var(--warp-accent) 28%, var(--stroke-dim));
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.72),
+    0 24px 64px rgba(42, 78, 91, 0.18),
+    0 0 42px color-mix(in srgb, var(--warp-accent) 10%, transparent);
+}
+
+:global(html[data-theme='light']) .bay__head,
+:global(html[data-theme='light']) .bay__foot {
+  border-color: var(--stroke-dim);
+}
+
+:global(html[data-theme='light']) .bay__status,
+:global(html[data-theme='light']) .target__url,
+:global(html[data-theme='light']) .launch__unit,
+:global(html[data-theme='light']) .bay__foot,
+:global(html[data-theme='light']) .stage__back a,
+:global(html[data-theme='light']) .muted {
+  color: var(--text-muted);
+}
+
+:global(html[data-theme='light']) .bay__banner,
+:global(html[data-theme='light']) .brief,
+:global(html[data-theme='light']) .ad,
+:global(html[data-theme='light']) .target,
+:global(html[data-theme='light']) .launch__bar {
+  border-color: var(--stroke-dim);
+}
+
+:global(html[data-theme='light']) .bay__banner {
+  color: var(--text-secondary);
+}
+
+:global(html[data-theme='light']) .target {
+  background: rgba(224, 235, 236, 0.72);
+}
+
+:global(html[data-theme='light']) .target__icon,
+:global(html[data-theme='light']) .launch__bar {
+  background: var(--bg-input);
+}
+
+:global(html[data-theme='light']) .target__title {
+  color: var(--text-primary);
+}
+
+:global(html[data-theme='light']) .brief,
+:global(html[data-theme='light']) .ad,
+:global(html[data-theme='light']) .launch__hint,
+:global(html[data-theme='light']) .skip {
+  color: #294754;
+}
+
+:global(html[data-theme='light']) .brief {
+  background: rgba(248, 252, 252, 0.94);
+  border-color: color-mix(in srgb, var(--warp-accent) 24%, var(--stroke-dim));
+  box-shadow:
+    inset 3px 0 0 color-mix(in srgb, var(--warp-accent) 52%, transparent),
+    0 4px 16px rgba(42, 78, 91, 0.08);
+}
+
+:global(html[data-theme='light']) .launch__track {
+  stroke: var(--stroke-mid);
+}
+
+:global(html[data-theme='light']) .stage__back a:hover {
+  color: var(--warp-accent);
+}
+
+:global(html[data-theme='light']) .error {
+  color: var(--danger);
 }
 
 .warp--launch .launch__num {

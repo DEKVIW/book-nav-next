@@ -55,6 +55,10 @@ function placeNear(el: HTMLElement) {
 }
 
 function onScrollOrResize() {
+  if (window.innerWidth <= 720 || window.matchMedia('(hover: none), (pointer: coarse)').matches) {
+    hide()
+    return
+  }
   if (!visible.value || !activeEl) return
   if (!activeEl.isConnected) {
     hide()
