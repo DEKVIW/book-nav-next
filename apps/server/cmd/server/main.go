@@ -30,6 +30,9 @@ func main() {
 		os.Exit(1)
 	}
 	defer application.Close()
+	cleanupCtx, cancelCleanup := context.WithCancel(context.Background())
+	defer cancelCleanup()
+	go application.SearchShares.RunCleanup(cleanupCtx)
 
 	srv := &http.Server{
 		Addr:              cfg.HTTPAddr,

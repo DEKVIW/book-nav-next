@@ -19,10 +19,11 @@ import (
 )
 
 type App struct {
-	Config *config.Config
-	DB     *sql.DB
-	DBPath string
-	Router http.Handler
+	Config       *config.Config
+	DB           *sql.DB
+	DBPath       string
+	Router       http.Handler
+	SearchShares *service.SearchShareService
 }
 
 func New(cfg *config.Config) (*App, error) {
@@ -47,6 +48,7 @@ func New(cfg *config.Config) (*App, error) {
 	oplog := repository.NewOpLogRepo(sqlDB)
 	jobs := repository.NewJobRepo(sqlDB)
 	deadlinks := repository.NewDeadlinkRepo(sqlDB)
+	searchShares := repository.NewSearchShareRepo(sqlDB)
 
 	// services
 	authSvc := service.NewAuthService(users, sessions, invites)
@@ -57,6 +59,7 @@ func New(cfg *config.Config) (*App, error) {
 	adminSvc := service.NewAdminService(users, invites, websites, categories, oplog, jobs, settingsSvc, cfg.DataDir, dbPath)
 	adminSvc.SetDeadlinkRepo(deadlinks)
 	jobSvc := service.NewJobService(jobs, websites, deadlinks, settingsSvc, cfg.DataDir)
+	searchShareSvc := service.NewSearchShareService(searchShares, websites, settingsSvc)
 	// legacy parity: create→icon+vector, update→conditional, delete→clear vector
 	websiteSvc.SetSideEffects(jobSvc)
 
@@ -66,18 +69,19 @@ func New(cfg *config.Config) (*App, error) {
 	}
 
 	router := handler.NewRouter(handler.Deps{
-		Config:     cfg,
-		Auth:       authSvc,
-		Portal:     portalSvc,
-		Websites:   websiteSvc,
-		Categories: categorySvc,
-		Admin:      adminSvc,
-		Settings:   settingsSvc,
-		Jobs:       jobSvc,
-		DB:         sqlDB,
+		Config:       cfg,
+		Auth:         authSvc,
+		Portal:       portalSvc,
+		Websites:     websiteSvc,
+		Categories:   categorySvc,
+		Admin:        adminSvc,
+		Settings:     settingsSvc,
+		Jobs:         jobSvc,
+		SearchShares: searchShareSvc,
+		DB:           sqlDB,
 	})
 
-	return &App{Config: cfg, DB: sqlDB, DBPath: dbPath, Router: router}, nil
+	return &App{Config: cfg, DB: sqlDB, DBPath: dbPath, Router: router, SearchShares: searchShareSvc}, nil
 }
 
 func (a *App) Close() error {

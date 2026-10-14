@@ -24,6 +24,11 @@ export const router = createRouter({
       component: () => import('@/modules/portal/pages/GotoPage.vue'),
     },
     {
+      path: '/share/:token',
+      name: 'search-share',
+      component: () => import('@/modules/portal/pages/SearchSharePage.vue'),
+    },
+    {
       path: '/admin',
       component: () => import('@/modules/admin/components/AdminLayout.vue'),
       meta: { requiresAdmin: true },
@@ -87,6 +92,11 @@ export const router = createRouter({
           path: 'jobs',
           name: 'admin-jobs',
           component: () => import('@/modules/admin/pages/JobsPage.vue'),
+        },
+        {
+          path: 'shares',
+          name: 'admin-shares',
+          component: () => import('@/modules/admin/pages/SharesPage.vue'),
         },
         {
           path: 'about',

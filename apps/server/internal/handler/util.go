@@ -30,6 +30,8 @@ func writeErr(w http.ResponseWriter, err error) {
 			status = http.StatusNotFound
 		case apperr.Conflict:
 			status = http.StatusConflict
+		case apperr.RateLimited:
+			status = http.StatusTooManyRequests
 		case apperr.Internal:
 			status = http.StatusInternalServerError
 		case apperr.Validation:

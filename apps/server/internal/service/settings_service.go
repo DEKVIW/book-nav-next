@@ -18,6 +18,24 @@ type SettingsService struct {
 	repo *repository.SettingsRepo
 }
 
+type SharePolicy struct {
+	GuestEnabled     bool
+	GuestMaxDays     int
+	GuestHourlyLimit int
+	GuestDailyLimit  int
+	GuestActiveLimit int
+	GuestMaxItems    int
+}
+
+const (
+	defaultGuestShareMaxDays     = 7
+	defaultGuestShareHourlyLimit = 10
+	defaultGuestShareDailyLimit  = 30
+	defaultGuestShareActiveLimit = 50
+	defaultGuestShareMaxItems    = 20
+	maxGuestShareItems           = 40
+)
+
 func NewSettingsService(repo *repository.SettingsRepo) *SettingsService {
 	return &SettingsService{repo: repo}
 }
@@ -96,6 +114,14 @@ func (s *SettingsService) EnsureDefaults(ctx context.Context) error {
 			"end":           "",
 			"remember_days": 7,
 		},
+		"sharing": {
+			"guest_enabled":      false,
+			"guest_max_days":     defaultGuestShareMaxDays,
+			"guest_hourly_limit": defaultGuestShareHourlyLimit,
+			"guest_daily_limit":  defaultGuestShareDailyLimit,
+			"guest_active_limit": defaultGuestShareActiveLimit,
+			"guest_max_items":    defaultGuestShareMaxItems,
+		},
 		"icon": {
 			"display_mode":      "smart",
 			"auto_fetch":        true,
@@ -134,6 +160,7 @@ func (s *SettingsService) Public(ctx context.Context) (domain.PublicSettings, er
 	ai, _ := s.repo.GetNamespace(ctx, "ai")
 	ann, _ := s.repo.GetNamespace(ctx, "announcement")
 	vec, _ := s.repo.GetNamespace(ctx, "vector")
+	sharing, _ := s.repo.GetNamespace(ctx, "sharing")
 
 	// 前台「AI 搜索」：总开关或向量启用即可
 	aiOn := decodeBool(ai["enabled"], false)
@@ -147,6 +174,9 @@ func (s *SettingsService) Public(ctx context.Context) (domain.PublicSettings, er
 		FooterContent:        decodeStr(site["footer"], ""),
 		AISearchEnabled:      aiOn || vectorOn,
 		AIAllowAnon:          decodeBool(ai["allow_anonymous"], false),
+		GuestShareEnabled:    decodeBool(sharing["guest_enabled"], false),
+		GuestShareMaxDays:    normalizeGuestShareMaxDays(decodeInt(sharing["guest_max_days"], defaultGuestShareMaxDays)),
+		GuestShareMaxItems:   normalizeBounded(decodeInt(sharing["guest_max_items"], defaultGuestShareMaxItems), 1, maxGuestShareItems, defaultGuestShareMaxItems),
 		EnableTransition:     decodeBool(tr["enable"], false),
 		TransitionTime:       decodeInt(tr["time"], 5),
 		AdminTransition:      decodeInt(tr["admin_time"], 0),
@@ -163,6 +193,18 @@ func (s *SettingsService) Public(ctx context.Context) (domain.PublicSettings, er
 		AnnouncementEnd:      decodeStr(ann["end"], ""),
 		AnnouncementRemember: decodeInt(ann["remember_days"], 7),
 	}, nil
+}
+
+func (s *SettingsService) SharePolicy(ctx context.Context) SharePolicy {
+	raw, _ := s.repo.GetNamespace(ctx, "sharing")
+	return SharePolicy{
+		GuestEnabled:     decodeBool(raw["guest_enabled"], false),
+		GuestMaxDays:     normalizeGuestShareMaxDays(decodeInt(raw["guest_max_days"], defaultGuestShareMaxDays)),
+		GuestHourlyLimit: normalizePositive(decodeInt(raw["guest_hourly_limit"], defaultGuestShareHourlyLimit), defaultGuestShareHourlyLimit),
+		GuestDailyLimit:  normalizePositive(decodeInt(raw["guest_daily_limit"], defaultGuestShareDailyLimit), defaultGuestShareDailyLimit),
+		GuestActiveLimit: normalizePositive(decodeInt(raw["guest_active_limit"], defaultGuestShareActiveLimit), defaultGuestShareActiveLimit),
+		GuestMaxItems:    normalizeBounded(decodeInt(raw["guest_max_items"], defaultGuestShareMaxItems), 1, maxGuestShareItems, defaultGuestShareMaxItems),
+	}
 }
 
 // GetNamespaceForAdmin masks secrets for admin UI.
@@ -210,6 +252,9 @@ func (s *SettingsService) SetNamespace(ctx context.Context, ns string, values ma
 	if err != nil {
 		return err
 	}
+	if ns == "sharing" {
+		values = normalizeSharingSettings(values)
+	}
 	cleaned := map[string]any{}
 	for k, v := range values {
 		if strings.HasSuffix(k, "_configured") {
@@ -234,6 +279,42 @@ func (s *SettingsService) SetNamespace(ctx context.Context, ns string, values ma
 		return nil
 	}
 	return s.repo.SetNamespace(ctx, ns, cleaned)
+}
+
+func normalizeSharingSettings(values map[string]any) map[string]any {
+	normalized := make(map[string]any, len(values))
+	for key, value := range values {
+		normalized[key] = value
+	}
+	if _, ok := values["guest_max_days"]; ok {
+		normalized["guest_max_days"] = normalizeBounded(settingInt(values["guest_max_days"]), 1, 7, defaultGuestShareMaxDays)
+	}
+	if _, ok := values["guest_hourly_limit"]; ok {
+		normalized["guest_hourly_limit"] = normalizePositive(settingInt(values["guest_hourly_limit"]), defaultGuestShareHourlyLimit)
+	}
+	if _, ok := values["guest_daily_limit"]; ok {
+		normalized["guest_daily_limit"] = normalizePositive(settingInt(values["guest_daily_limit"]), defaultGuestShareDailyLimit)
+	}
+	if _, ok := values["guest_active_limit"]; ok {
+		normalized["guest_active_limit"] = normalizePositive(settingInt(values["guest_active_limit"]), defaultGuestShareActiveLimit)
+	}
+	if _, ok := values["guest_max_items"]; ok {
+		normalized["guest_max_items"] = normalizeBounded(settingInt(values["guest_max_items"]), 1, maxGuestShareItems, defaultGuestShareMaxItems)
+	}
+	return normalized
+}
+
+func settingInt(value any) int {
+	switch number := value.(type) {
+	case int:
+		return number
+	case int64:
+		return int(number)
+	case float64:
+		return int(number)
+	default:
+		return 0
+	}
 }
 
 // VectorConfig builds vector.Client config from settings + env overrides.
@@ -336,4 +417,25 @@ func decodeFloat(raw json.RawMessage, def float64) float64 {
 		return def
 	}
 	return f
+}
+
+func normalizeGuestShareMaxDays(value int) int {
+	if value < 1 || value > 7 {
+		return defaultGuestShareMaxDays
+	}
+	return value
+}
+
+func normalizePositive(value, fallback int) int {
+	if value < 1 {
+		return fallback
+	}
+	return value
+}
+
+func normalizeBounded(value, min, max, fallback int) int {
+	if value < min || value > max {
+		return fallback
+	}
+	return value
 }

@@ -19,11 +19,12 @@ const logoFileInput = ref<HTMLInputElement | null>(null)
 const faviconFileInput = ref<HTMLInputElement | null>(null)
 const testResult = ref<{ ok?: boolean; message?: string; details?: Record<string, string> } | null>(null)
 
-type TabKey = 'basic' | 'transition' | 'ai' | 'vector'
+type TabKey = 'basic' | 'transition' | 'ai' | 'sharing' | 'vector'
 const tabs: { key: TabKey; label: string }[] = [
   { key: 'basic', label: '基本设置' },
   { key: 'transition', label: '过渡页' },
   { key: 'ai', label: 'AI 配置' },
+  { key: 'sharing', label: '分享设置' },
   { key: 'vector', label: '向量配置' },
 ]
 const tabKeys = new Set(tabs.map((t) => t.key))
@@ -74,6 +75,14 @@ const aiFlags = reactive({
   allow_anonymous: false,
   temperature: 0.7,
   max_tokens: 800,
+})
+const sharing = reactive({
+  guest_enabled: false,
+  guest_max_days: 7,
+  guest_hourly_limit: 10,
+  guest_daily_limit: 30,
+  guest_active_limit: 50,
+  guest_max_items: 20,
 })
 const vector = reactive({
   enabled: false,
@@ -222,16 +231,18 @@ async function load() {
   loading.value = true
   try {
     // Parallel: 5 serial RTTs (~3.4s) → one wave (~0.7s) on production latency
-    const [siteRaw, transitionRaw, announcementRaw, vectorRaw] = await Promise.all([
+    const [siteRaw, transitionRaw, announcementRaw, sharingRaw, vectorRaw] = await Promise.all([
       loadNs('site'),
       loadNs('transition'),
       loadNs('announcement'),
+      loadNs('sharing'),
       loadNs('vector'),
       loadAIState().then(() => null),
     ])
     applyNs(siteRaw as Record<string, unknown>, site)
     applyNs(transitionRaw as Record<string, unknown>, transition)
     applyNs(announcementRaw as Record<string, unknown>, announcement)
+    applyNs(sharingRaw as Record<string, unknown>, sharing)
     applyNs(vectorRaw as Record<string, unknown>, vector)
   } catch (e: unknown) {
     toast.error(e instanceof Error ? e.message : '加载失败')
@@ -265,6 +276,7 @@ async function saveAll() {
       temperature: aiFlags.temperature,
       max_tokens: aiFlags.max_tokens,
     })
+    await apiPut('/api/v1/admin/settings/sharing', { ...sharing })
     await apiPut('/api/v1/admin/settings/vector', stripSecrets({ ...vector }, ['embedding_api_key']))
     toast.success('设置已保存')
     await load()
@@ -705,6 +717,39 @@ onMounted(() => {
             </div>
           </section>
 
+          <!-- 分享设置 -->
+          <section v-show="tab === 'sharing'" class="c-card c-card__body panel-card">
+            <h3 class="c-card__title">搜索结果分享</h3>
+            <div class="c-form c-form--2col">
+              <label class="row-check span-2">
+                <input v-model="sharing.guest_enabled" type="checkbox" /> 允许游客创建分享链接
+              </label>
+              <p class="settings-help span-2">
+                游客只能分享公开且有效的链接，最长有效期不超过 7 天；管理员仍可创建永久分享，并可主动包含私人链接。
+              </p>
+              <label>
+                游客最长有效期（天）
+                <input v-model.number="sharing.guest_max_days" class="c-input" type="number" min="1" max="7" />
+              </label>
+              <label>
+                单次最多结果数
+                <input v-model.number="sharing.guest_max_items" class="c-input" type="number" min="1" max="40" />
+              </label>
+              <label>
+                单 IP 每小时创建数
+                <input v-model.number="sharing.guest_hourly_limit" class="c-input" type="number" min="1" />
+              </label>
+              <label>
+                单 IP 每日创建数
+                <input v-model.number="sharing.guest_daily_limit" class="c-input" type="number" min="1" />
+              </label>
+              <label>
+                单 IP 有效分享数
+                <input v-model.number="sharing.guest_active_limit" class="c-input" type="number" min="1" />
+              </label>
+            </div>
+          </section>
+
           <!-- 向量配置 -->
           <section v-show="tab === 'vector'" class="c-card c-card__body panel-card">
             <h3 class="c-card__title">向量配置</h3>
@@ -1009,6 +1054,12 @@ onMounted(() => {
 }
 .panel-card .c-card__title {
   margin-bottom: 16px;
+}
+.settings-help {
+  margin: -2px 0 2px;
+  color: var(--console-text-3);
+  font-size: 12px;
+  line-height: 1.6;
 }
 .c-form--2col {
   display: grid;
