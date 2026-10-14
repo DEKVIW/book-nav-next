@@ -31,6 +31,12 @@ const emit = defineEmits<{
 const auth = useAuthStore()
 const portal = usePortalStore()
 const toast = useToast()
+const brandImageFailed = ref(false)
+const brandImage = computed(() => portal.settings?.site_logo || portal.settings?.site_favicon || '')
+
+watch(brandImage, () => {
+  brandImageFailed.value = false
+})
 
 const STORAGE_MODE = 'booknav_sidebar_mode'
 const STORAGE_LEGACY = 'booknav_sidebar_open'
@@ -485,10 +491,11 @@ defineExpose({
         >
           <span class="side-brand__logo">
             <img
-              v-if="portal.settings?.site_logo || portal.settings?.site_favicon"
-              :src="portal.settings?.site_logo || portal.settings?.site_favicon"
+              v-if="brandImage && !brandImageFailed"
+              :src="brandImage"
               alt=""
               class="side-brand__img"
+              @error="brandImageFailed = true"
             />
             <AppIcon v-else name="cpu" :size="20" />
           </span>

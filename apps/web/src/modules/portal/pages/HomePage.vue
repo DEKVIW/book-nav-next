@@ -43,12 +43,14 @@ const formRef = ref<InstanceType<typeof WebsiteFormModal> | null>(null)
 const dupOpen = ref(false)
 const dupSite = ref<Website | null>(null)
 const pendingForceUrl = ref('')
-const dragState = ref<{ catId: number; ids: number[] } | null>(null)
+const dragState = ref<{ categoryId: number; draggedId: number; ids: number[] } | null>(null)
 const showTop = ref(false)
 const useAI = ref(false)
 const locatedSiteId = ref<number | null>(null)
 const locatingSiteId = ref<number | null>(null)
 let locatePulseTimer: number | undefined
+let dragPointerY = 0
+let dragScrollFrame = 0
 
 const displayCategories = computed(() => portal.categories)
 
@@ -95,7 +97,8 @@ function limitOf(cat: Category) {
 
 function sitesFor(cat: Category): Website[] {
   const cid = cacheIdFor(cat)
-  const all = sectionSitesCache.value[cid] || cat.websites || []
+  const isHomeTab = resolveTab(cat) === (cat.displayed_subcategory_id ?? 'root')
+  const all = sectionSitesCache.value[cid] || (isHomeTab ? cat.websites || [] : [])
   if (isExpanded(cat)) return all
   const lim = limitOf(cat)
   // 首页首屏：未展开时始终限显
@@ -164,13 +167,16 @@ async function onSidebarSubcategory(parentId: number, childId: number | 'root') 
 
 function initTabs() {
   for (const cat of portal.categories) {
-    if (cat.displayed_subcategory_id) {
-      activeTabs.value[cat.id] = cat.displayed_subcategory_id
-      // 首页只带了限显列表
-      sectionSitesCache.value[cat.displayed_subcategory_id] = cat.websites || []
-    } else {
-      activeTabs.value[cat.id] = 'root'
-      sectionSitesCache.value[cat.id] = cat.websites || []
+    const selectedTab = activeTabs.value[cat.id]
+    const selectedTabExists =
+      selectedTab === 'root' || cat.children?.some((child) => child.id === selectedTab)
+    if (selectedTab === undefined || !selectedTabExists) {
+      activeTabs.value[cat.id] = cat.displayed_subcategory_id ?? 'root'
+    }
+    const cacheId = cacheIdFor(cat)
+    const isHomeTab = resolveTab(cat) === (cat.displayed_subcategory_id ?? 'root')
+    if (!sectionSitesCache.value[cacheId] && isHomeTab) {
+      sectionSitesCache.value[cacheId] = cat.websites || []
     }
   }
 }
@@ -257,11 +263,16 @@ onMounted(async () => {
   }
   window.addEventListener('paste', onPaste)
   window.addEventListener('scroll', onScroll, { passive: true })
+  window.addEventListener('dragover', onWindowDragOver)
+  window.addEventListener('dragend', finishDrag)
 })
 
 onUnmounted(() => {
   window.removeEventListener('paste', onPaste)
   window.removeEventListener('scroll', onScroll)
+  window.removeEventListener('dragover', onWindowDragOver)
+  window.removeEventListener('dragend', finishDrag)
+  finishDrag()
   if (locatePulseTimer) {
     window.clearTimeout(locatePulseTimer)
   }
@@ -374,15 +385,25 @@ async function onFormSubmit(payload: Record<string, unknown>) {
   formLoading.value = true
   formProgress.value = '正在保存…'
   try {
+    const affectedCategoryIds = new Set<number>()
     if (formMode.value === 'create') {
-      await portal.createWebsite(payload)
+      const site = await portal.createWebsite(payload)
+      if (site.category_id != null) affectedCategoryIds.add(site.category_id)
       toast.success('链接已添加')
     } else if (formSite.value) {
-      await portal.updateWebsite(formSite.value.id, payload)
+      if (formSite.value.category_id != null) affectedCategoryIds.add(formSite.value.category_id)
+      const site = await portal.updateWebsite(formSite.value.id, payload)
+      if (site.category_id != null) affectedCategoryIds.add(site.category_id)
       toast.success('已保存')
     }
     formOpen.value = false
-    // 刷新后重新 initTabs
+    for (const categoryId of affectedCategoryIds) {
+      try {
+        sectionSitesCache.value[categoryId] = await portal.loadCategoryAll(categoryId)
+      } catch {
+        continue
+      }
+    }
     initTabs()
   } catch (err: unknown) {
     toast.error(err instanceof Error ? err.message : '操作失败')
@@ -488,43 +509,122 @@ function ctxAdd() {
 async function ctxRemove() {
   if (!ctx.value) return
   const site = ctx.value.site
+  const categoryId = site.category_id ?? findCachedCategoryId(site.id)
   ctx.value = null
   if (!confirm(`删除「${site.title}」？`)) return
   try {
     await portal.deleteWebsite(site.id)
+    if (categoryId != null) {
+      try {
+        sectionSitesCache.value[categoryId] = await portal.loadCategoryAll(categoryId)
+      } catch {
+        sectionSitesCache.value[categoryId] = (sectionSitesCache.value[categoryId] || []).filter(
+          (cachedSite) => cachedSite.id !== site.id,
+        )
+      }
+    } else {
+      for (const [id, sites] of Object.entries(sectionSitesCache.value)) {
+        sectionSitesCache.value[Number(id)] = sites.filter((cachedSite) => cachedSite.id !== site.id)
+      }
+    }
     toast.success('已删除')
-    initTabs()
   } catch (err: unknown) {
     toast.error(err instanceof Error ? err.message : '删除失败')
   }
 }
 
-function onDragStart(cat: Category, site: Website, e: DragEvent) {
-  if (!auth.isAdmin) return
-  e.dataTransfer?.setData('text/site-id', String(site.id))
-  e.dataTransfer!.effectAllowed = 'move'
-  dragState.value = { catId: cat.id, ids: sitesFor(cat).map((s) => s.id) }
+function findCachedCategoryId(siteId: number): number | null {
+  for (const cat of displayCategories.value) {
+    const categoryId = cacheIdFor(cat)
+    if (sectionSitesCache.value[categoryId]?.some((site) => site.id === siteId)) {
+      return categoryId
+    }
+  }
+  return null
 }
 
-function onDrop(cat: Category, target: Website, e: DragEvent) {
+function onDragStart(cat: Category, site: Website, e: DragEvent) {
+  if (!auth.isAdmin) return
+  if (!e.dataTransfer) return
+  e.dataTransfer.setData('text/site-id', String(site.id))
+  e.dataTransfer.effectAllowed = 'move'
+  dragState.value = {
+    categoryId: cacheIdFor(cat),
+    draggedId: site.id,
+    ids: sitesFor(cat).map((listedSite) => listedSite.id),
+  }
+}
+
+async function onDrop(cat: Category, target: Website, e: DragEvent) {
   e.preventDefault()
   if (!auth.isAdmin || !dragState.value) return
-  const fromId = Number(e.dataTransfer?.getData('text/site-id'))
-  const ids = [...dragState.value.ids]
+  const state = dragState.value
+  const categoryId = cacheIdFor(cat)
+  if (state.categoryId !== categoryId) {
+    finishDrag()
+    return
+  }
+  const fromId = state.draggedId
+  const ids = [...state.ids]
   const from = ids.indexOf(fromId)
   const to = ids.indexOf(target.id)
-  if (from < 0 || to < 0 || from === to) return
+  if (from < 0 || to < 0 || from === to) {
+    finishDrag()
+    return
+  }
   ids.splice(from, 1)
   ids.splice(to, 0, fromId)
-  const cid = cacheIdFor(cat)
-  const map = new Map((sectionSitesCache.value[cid] || sitesFor(cat)).map((s) => [s.id, s]))
-  // 合并：只重排当前可见顺序到缓存前部
-  const rest = (sectionSitesCache.value[cid] || []).filter((s) => !ids.includes(s.id))
-  sectionSitesCache.value[cid] = [...ids.map((id) => map.get(id)!).filter(Boolean), ...rest]
-  portal
-    .reorderWebsites(cid, sectionSitesCache.value[cid].map((s) => s.id))
-    .then(() => toast.success('排序已保存'))
-    .catch((err) => toast.error(err.message || '排序失败'))
+  const previous = [...(sectionSitesCache.value[categoryId] || cat.websites || [])]
+  const map = new Map(previous.map((listedSite) => [listedSite.id, listedSite]))
+  const reordered = ids.map((id) => map.get(id)).filter((listedSite): listedSite is Website => !!listedSite)
+  if (reordered.length !== ids.length) {
+    finishDrag()
+    return
+  }
+  const rest = previous.filter((listedSite) => !ids.includes(listedSite.id))
+  sectionSitesCache.value[categoryId] = [...reordered, ...rest]
+  finishDrag()
+  try {
+    await portal.reorderWebsites(categoryId, ids)
+    toast.success('排序已保存')
+  } catch (err: unknown) {
+    sectionSitesCache.value[categoryId] = previous
+    toast.error(err instanceof Error ? err.message : '排序失败')
+  }
+}
+
+function onWindowDragOver(event: DragEvent) {
+  if (!dragState.value) return
+  dragPointerY = event.clientY
+  const edgeSize = 96
+  if ((dragPointerY < edgeSize || dragPointerY > window.innerHeight - edgeSize) && !dragScrollFrame) {
+    dragScrollFrame = window.requestAnimationFrame(autoScrollWhileDragging)
+  }
+}
+
+function autoScrollWhileDragging() {
+  dragScrollFrame = 0
+  if (!dragState.value) return
+  const edgeSize = 96
+  const maxSpeed = 18
+  let delta = 0
+  if (dragPointerY < edgeSize) {
+    delta = -Math.max(2, Math.ceil(((edgeSize - dragPointerY) / edgeSize) * maxSpeed))
+  } else if (dragPointerY > window.innerHeight - edgeSize) {
+    const distance = window.innerHeight - dragPointerY
+    delta = Math.max(2, Math.ceil(((edgeSize - distance) / edgeSize) * maxSpeed))
+  }
+  if (!delta) return
+  window.scrollBy(0, delta)
+  dragScrollFrame = window.requestAnimationFrame(autoScrollWhileDragging)
+}
+
+function finishDrag() {
+  dragState.value = null
+  if (dragScrollFrame) {
+    window.cancelAnimationFrame(dragScrollFrame)
+    dragScrollFrame = 0
+  }
 }
 
 async function onFormTranslate(payload: { field: 'title' | 'description'; text: string }) {

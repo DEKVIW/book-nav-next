@@ -303,16 +303,88 @@ UPDATE websites SET views = views + 1, views_today = views_today + 1, last_viewe
 }
 
 func (r *WebsiteRepo) UpdateOrders(ctx context.Context, categoryID *int64, ids []int64) error {
+	if len(ids) == 0 {
+		return nil
+	}
+
+	requested := make(map[int64]struct{}, len(ids))
+	for _, id := range ids {
+		if _, exists := requested[id]; exists {
+			return fmt.Errorf("duplicate website id %d", id)
+		}
+		requested[id] = struct{}{}
+	}
+
 	tx, err := r.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
 	}
 	defer func() { _ = tx.Rollback() }()
-	n := len(ids)
-	for i, id := range ids {
-		order := n - i
-		if _, err := tx.ExecContext(ctx, `UPDATE websites SET sort_order = ?, updated_at = ? WHERE id = ?`, order, clock.NowRFC3339(), id); err != nil {
+	query := `SELECT id, sort_order FROM websites WHERE category_id IS NULL`
+	args := []any{}
+	if categoryID != nil {
+		query = `SELECT id, sort_order FROM websites WHERE category_id = ?`
+		args = append(args, *categoryID)
+	}
+	rows, err := tx.QueryContext(ctx, query, args...)
+	if err != nil {
+		return err
+	}
+
+	found := make(map[int64]struct{}, len(ids))
+	var maxRemainingOrder int
+	hasRemaining := false
+	for rows.Next() {
+		var id int64
+		var order int
+		if err := rows.Scan(&id, &order); err != nil {
+			rows.Close()
 			return err
+		}
+		if _, exists := requested[id]; exists {
+			found[id] = struct{}{}
+			continue
+		}
+		if !hasRemaining || order > maxRemainingOrder {
+			maxRemainingOrder = order
+			hasRemaining = true
+		}
+	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return err
+	}
+	if err := rows.Close(); err != nil {
+		return err
+	}
+	if len(found) != len(ids) {
+		for _, id := range ids {
+			if _, exists := found[id]; !exists {
+				return fmt.Errorf("website %d does not belong to the requested category", id)
+			}
+		}
+	}
+
+	baseOrder := 0
+	if hasRemaining {
+		baseOrder = maxRemainingOrder
+	}
+	now := clock.NowRFC3339()
+	for i, id := range ids {
+		order := baseOrder + len(ids) - i
+		var result sql.Result
+		if categoryID == nil {
+			result, err = tx.ExecContext(ctx, `UPDATE websites SET sort_order = ?, updated_at = ? WHERE id = ? AND category_id IS NULL`, order, now, id)
+		} else {
+			result, err = tx.ExecContext(ctx, `UPDATE websites SET sort_order = ?, updated_at = ? WHERE id = ? AND category_id = ?`, order, now, id, *categoryID)
+		}
+		if err != nil {
+			return err
+		}
+		if affected, err := result.RowsAffected(); err != nil {
+			return err
+		} else if affected != 1 {
+			return fmt.Errorf("website %d does not belong to the requested category", id)
 		}
 	}
 	return tx.Commit()
