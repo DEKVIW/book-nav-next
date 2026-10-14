@@ -3,6 +3,7 @@ import { computed, ref, watch } from 'vue'
 import { RouterLink, RouterView, useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/shared/stores/auth'
 import AppIcon from '@/shared/ui/AppIcon.vue'
+import ThemeMenu from '@/shared/ui/ThemeMenu.vue'
 
 const auth = useAuthStore()
 const route = useRoute()
@@ -96,6 +97,7 @@ async function logout() {
         <span class="admin-topbar__crumb">{{ pageTitle }}</span>
       </div>
       <div class="admin-topbar__right">
+        <ThemeMenu />
         <RouterLink class="admin-top-link" to="/" title="前台">
           <AppIcon name="home" :size="16" />
           <span class="admin-top-link__text">前台</span>

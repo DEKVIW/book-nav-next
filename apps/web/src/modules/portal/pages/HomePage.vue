@@ -968,6 +968,10 @@ function scrollTop() {
   clip-path: polygon(4px 0, 100% 0, 100% calc(100% - 4px), calc(100% - 4px) 100%, 0 100%, 0 4px);
   white-space: nowrap;
 }
+
+:global(html[data-theme='light']) .search-chip {
+  background: rgba(247, 251, 251, 0.72);
+}
 .search-chip--query {
   max-width: min(42vw, 280px);
   overflow: hidden;

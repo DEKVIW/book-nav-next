@@ -4,8 +4,10 @@ import { RouterView, useRoute } from 'vue-router'
 import ToastHost from '@/shared/ui/ToastHost.vue'
 import CardTooltipHost from '@/shared/ui/CardTooltipHost.vue'
 import SpaceSky from '@/shared/ui/SpaceSky.vue'
+import { useTheme } from '@/shared/composables/useTheme'
 
 const route = useRoute()
+const { resolved } = useTheme()
 
 /** 前台星空：后台与过渡页自管背景时关闭，避免叠两层 */
 const showAmbientSky = computed(() => {
@@ -19,7 +21,7 @@ const showAmbientSky = computed(() => {
 <template>
   <div class="mecha-void app-root" :class="{ 'app-root--sky': showAmbientSky }">
     <!-- ambient: 更轻的 canvas，避免首屏 full 星空抢主线程 -->
-    <SpaceSky v-if="showAmbientSky" intensity="ambient" />
+    <SpaceSky v-if="showAmbientSky" intensity="ambient" :theme="resolved" />
     <RouterView />
     <ToastHost />
     <CardTooltipHost />

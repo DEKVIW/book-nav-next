@@ -53,6 +53,7 @@ function onContext(e: MouseEvent) {
 }
 
 function onEnter(e: MouseEvent) {
+  if (window.innerWidth <= 720 || window.matchMedia('(hover: none), (pointer: coarse)').matches) return
   const desc = (props.site.description || '').trim()
   if (!desc) return
   tip.scheduleShow(e.currentTarget as HTMLElement, desc, props.site.title)
@@ -305,19 +306,19 @@ onBeforeUnmount(() => {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  color: #f2f7ff;
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.65);
+  color: var(--text-primary);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
 }
 .site-card__desc {
   margin: 5px 0 0;
   font-size: var(--text-xs);
-  color: #c5d4e8;
+  color: var(--text-secondary);
   line-height: 1.4;
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.55);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
 }
 .badge {
   font-size: 9px;
@@ -337,4 +338,5 @@ onBeforeUnmount(() => {
   border: 1px solid rgba(255, 77, 106, 0.4);
   background: rgba(255, 77, 106, 0.12);
 }
+
 </style>

@@ -352,4 +352,28 @@ watch(
   border-top: 1px solid var(--stroke-dim);
   background: rgba(0, 0, 0, 0.22);
 }
+
+:global(html[data-theme='light']) .ann-mask {
+  background:
+    radial-gradient(ellipse 60% 50% at 50% 40%, rgba(8, 126, 152, 0.08), transparent 70%),
+    rgba(44, 78, 91, 0.28);
+}
+
+:global(html[data-theme='light']) .ann-head {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.68), transparent);
+}
+
+:global(html[data-theme='light']) .ann-body {
+  background:
+    linear-gradient(135deg, rgba(154, 90, 0, 0.04), rgba(8, 126, 152, 0.03)),
+    var(--bg-inset);
+}
+
+:global(html[data-theme='light']) .ann-foot {
+  background: rgba(221, 233, 235, 0.7);
+}
+
+:global(html[data-theme='light']) .ann-content :deep(code) {
+  background: rgba(45, 79, 96, 0.08) !important;
+}
 </style>
