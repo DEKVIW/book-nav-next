@@ -13,8 +13,10 @@
     <script>
       (function () {
         try {
-          var mode = localStorage.getItem('booknav-theme') || 'dark';
-          var dark = mode === 'dark' || (mode === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+          var mode = localStorage.getItem('booknav-theme') || 'auto';
+          if (mode !== 'auto' && mode !== 'dark' && mode !== 'light' && mode !== 'system') mode = 'auto';
+          var hour = new Date().getHours();
+          var dark = mode === 'dark' || (mode === 'auto' && (hour < 7 || hour >= 19)) || (mode === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
           var theme = dark ? 'dark' : 'light';
           document.documentElement.dataset.theme = theme;
           document.documentElement.style.colorScheme = theme;

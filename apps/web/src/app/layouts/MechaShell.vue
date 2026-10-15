@@ -910,7 +910,7 @@ defineExpose({
   flex: 1;
   min-height: 0;
   overflow-y: auto;
-  overflow-x: visible;
+  overflow-x: hidden;
   display: flex;
   flex-direction: column;
   gap: 4px;

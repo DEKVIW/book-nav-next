@@ -8,13 +8,18 @@ const open = ref(false)
 const { mode, resolved, setTheme } = useTheme()
 
 const options: { value: ThemeMode; label: string; description: string; icon: string }[] = [
+  { value: 'auto', label: '自动', description: '按时间自动切换', icon: 'clock' },
   { value: 'light', label: '亮色', description: '白昼云海机甲', icon: 'sun' },
   { value: 'dark', label: '深色', description: '深空机甲舰桥', icon: 'moon' },
   { value: 'system', label: '跟随系统', description: '跟随设备主题', icon: 'monitor' },
 ]
 
-const activeLabel = computed(() => options.find((item) => item.value === mode.value)?.label || '深色')
-const triggerIcon = computed(() => (mode.value === 'system' ? 'monitor' : resolved.value === 'dark' ? 'moon' : 'sun'))
+const activeLabel = computed(() => options.find((item) => item.value === mode.value)?.label || '自动')
+const triggerIcon = computed(() => {
+  if (mode.value === 'auto') return 'clock'
+  if (mode.value === 'system') return 'monitor'
+  return resolved.value === 'dark' ? 'moon' : 'sun'
+})
 
 function toggle() {
   open.value = !open.value
