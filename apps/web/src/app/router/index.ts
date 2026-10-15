@@ -143,5 +143,7 @@ router.beforeEach(async (to) => {
 router.afterEach((to) => {
   if (to.name === 'home') {
     void usePortalStore().loadHome()
+  } else {
+    void usePortalStore().loadSettings()
   }
 })

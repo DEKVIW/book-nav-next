@@ -22,6 +22,8 @@ export const usePortalStore = defineStore('portal', () => {
   const searchMeta = ref<SearchMeta | null>(null)
   const searchLoading = ref(false)
   let loadHomeInflight: Promise<void> | null = null
+  let loadSettingsInflight: Promise<void> | null = null
+  let settingsLoadSeq = 0
   let searchSeq = 0
   let searchES: EventSource | null = null
 
@@ -43,6 +45,32 @@ export const usePortalStore = defineStore('portal', () => {
       }
     })()
     return loadHomeInflight
+  }
+
+  async function loadSettings(force = false) {
+    if (!force && settings.value) return
+    if (!force && loadSettingsInflight) return loadSettingsInflight
+
+    const seq = ++settingsLoadSeq
+    loadSettingsInflight = (async () => {
+      try {
+        const data = await apiGet<PublicSettings>('/api/v1/portal/settings')
+        if (seq === settingsLoadSeq) settings.value = data
+      } catch {
+        return
+      } finally {
+        if (seq === settingsLoadSeq) loadSettingsInflight = null
+      }
+    })()
+    return loadSettingsInflight
+  }
+
+  function updateSiteBranding(name: string, subtitle: string) {
+    if (!settings.value) {
+      void loadSettings(true)
+      return
+    }
+    settings.value = { ...settings.value, site_name: name, site_subtitle: subtitle }
   }
 
   function stopSearchStream() {
@@ -297,6 +325,8 @@ export const usePortalStore = defineStore('portal', () => {
     searchMeta,
     searchLoading,
     loadHome,
+    loadSettings,
+    updateSiteBranding,
     search,
     clearSearch,
     createWebsite,

@@ -13,10 +13,10 @@ import (
 )
 
 type PortalHandler struct {
-	portal  *service.PortalService
-	websites *service.WebsiteService
+	portal     *service.PortalService
+	websites   *service.WebsiteService
 	categories *service.CategoryService
-	jobs    *service.JobService
+	jobs       *service.JobService
 }
 
 func NewPortalHandler(
@@ -30,6 +30,15 @@ func NewPortalHandler(
 
 func (h *PortalHandler) Home(w http.ResponseWriter, r *http.Request) {
 	data, err := h.portal.Home(r.Context(), middleware.UserFrom(r.Context()))
+	if err != nil {
+		writeErr(w, err)
+		return
+	}
+	response.OK(w, data)
+}
+
+func (h *PortalHandler) Settings(w http.ResponseWriter, r *http.Request) {
+	data, err := h.portal.PublicSettings(r.Context())
 	if err != nil {
 		writeErr(w, err)
 		return

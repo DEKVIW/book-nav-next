@@ -24,6 +24,10 @@ func NewPortalService(
 	return &PortalService{categories: categories, websites: websites, settings: settings, oplog: oplog}
 }
 
+func (s *PortalService) PublicSettings(ctx context.Context) (domain.PublicSettings, error) {
+	return s.settings.Public(ctx)
+}
+
 func (s *PortalService) Home(ctx context.Context, user *domain.User) (*domain.HomeData, error) {
 	allCats, err := s.categories.ListAll(ctx)
 	if err != nil {

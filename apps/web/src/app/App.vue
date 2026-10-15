@@ -1,13 +1,25 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, watch } from 'vue'
 import { RouterView, useRoute } from 'vue-router'
 import ToastHost from '@/shared/ui/ToastHost.vue'
 import CardTooltipHost from '@/shared/ui/CardTooltipHost.vue'
 import SpaceSky from '@/shared/ui/SpaceSky.vue'
 import { useTheme } from '@/shared/composables/useTheme'
+import { usePortalStore } from '@/shared/stores/portal'
 
 const route = useRoute()
 const { resolved } = useTheme()
+const portal = usePortalStore()
+
+watch(
+  () => [portal.settings?.site_name, portal.settings?.site_subtitle] as const,
+  ([siteName, siteSubtitle]) => {
+    const title = siteName?.trim() || 'BookNav'
+    const subtitle = siteSubtitle?.trim()
+    document.title = subtitle ? `${title} - ${subtitle}` : title
+  },
+  { immediate: true },
+)
 
 /** 前台星空：后台与过渡页自管背景时关闭，避免叠两层 */
 const showAmbientSky = computed(() => {

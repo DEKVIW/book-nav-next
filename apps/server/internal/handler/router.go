@@ -105,6 +105,7 @@ func NewRouter(d Deps) http.Handler {
 		// portal
 		api.Route("/portal", func(pr chi.Router) {
 			pr.Get("/home", portalH.Home)
+			pr.Get("/settings", portalH.Settings)
 			pr.Get("/categories/{id}/websites", portalH.CategoryWebsites)
 			pr.Get("/websites/{id}", portalH.GetWebsite)
 			pr.Post("/websites/{id}/visit", portalH.Visit)

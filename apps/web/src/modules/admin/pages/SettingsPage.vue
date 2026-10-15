@@ -3,9 +3,11 @@ import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { apiDelete, apiGet, apiPost, apiPostForm, apiPut } from '@/shared/api/client'
 import { useToast } from '@/shared/composables/useToast'
+import { usePortalStore } from '@/shared/stores/portal'
 import AppIcon from '@/shared/ui/AppIcon.vue'
 
 const toast = useToast()
+const portal = usePortalStore()
 const route = useRoute()
 const router = useRouter()
 const loading = ref(false)
@@ -268,6 +270,7 @@ async function saveAll() {
   saving.value = true
   try {
     await apiPut('/api/v1/admin/settings/site', { ...site })
+    portal.updateSiteBranding(site.name, site.subtitle)
     await apiPut('/api/v1/admin/settings/transition', { ...transition })
     await apiPut('/api/v1/admin/settings/announcement', { ...announcement })
     await apiPut('/api/v1/admin/settings/ai', {
