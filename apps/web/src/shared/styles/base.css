@@ -56,6 +56,15 @@ textarea {
   color: inherit;
 }
 
+@media (max-width: 899px) {
+  input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='color']):not([type='file']):not([type='button']):not([type='submit']):not([type='reset']):not([type='hidden']),
+  textarea,
+  select,
+  [contenteditable='true'] {
+    font-size: 16px !important;
+  }
+}
+
 a {
   color: var(--energy);
 }

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { RouterLink, RouterView, useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/shared/stores/auth'
 import AppIcon from '@/shared/ui/AppIcon.vue'
@@ -12,12 +12,22 @@ const router = useRouter()
 const COLLAPSE_KEY = 'booknav_admin_collapsed'
 const collapsed = ref(localStorage.getItem(COLLAPSE_KEY) === '1')
 const mobileOpen = ref(false)
+const accountOpen = ref(false)
+const avatarFailed = ref(false)
 
 watch(collapsed, (v) => localStorage.setItem(COLLAPSE_KEY, v ? '1' : '0'))
 watch(
   () => route.path,
   () => {
     mobileOpen.value = false
+    accountOpen.value = false
+  },
+)
+
+watch(
+  () => auth.user?.avatar,
+  () => {
+    avatarFailed.value = false
   },
 )
 
@@ -69,11 +79,36 @@ const pageTitle = computed(() => {
 })
 
 const initial = computed(() => (auth.user?.username || 'A').slice(0, 1).toUpperCase())
+const accountTitle = computed(() => auth.user?.username || '管理员')
+
+function toggleAccount() {
+  accountOpen.value = !accountOpen.value
+}
 
 async function logout() {
+  accountOpen.value = false
   await auth.logout()
   router.push('/login')
 }
+
+function onDocumentClick(event: MouseEvent) {
+  const target = event.target as HTMLElement | null
+  if (accountOpen.value && !target?.closest('.admin-account-slot')) accountOpen.value = false
+}
+
+function onKeydown(event: KeyboardEvent) {
+  if (event.key === 'Escape') accountOpen.value = false
+}
+
+onMounted(() => {
+  document.addEventListener('click', onDocumentClick)
+  document.addEventListener('keydown', onKeydown)
+})
+
+onUnmounted(() => {
+  document.removeEventListener('click', onDocumentClick)
+  document.removeEventListener('keydown', onKeydown)
+})
 </script>
 
 <template>
@@ -104,24 +139,44 @@ async function logout() {
           <AppIcon name="home" :size="16" />
           <span class="admin-top-link__text">前台</span>
         </RouterLink>
-        <RouterLink class="admin-top-link" to="/admin/jobs" title="任务中心">
-          <AppIcon name="activity" :size="16" />
-          <span class="admin-top-link__text">任务中心</span>
-        </RouterLink>
-        <div class="admin-user" :title="auth.user?.email">
-          <img
-            v-if="auth.user?.avatar"
-            class="admin-user__avatar admin-user__avatar--img"
-            :src="auth.user.avatar"
-            alt=""
-          />
-          <span v-else class="admin-user__avatar">{{ initial }}</span>
-          <span class="admin-user__name">{{ auth.user?.username }}</span>
+        <div class="admin-account-slot">
+          <button
+            type="button"
+            class="admin-account-trigger"
+            :aria-label="accountTitle"
+            :aria-expanded="accountOpen"
+            aria-haspopup="menu"
+            :title="accountTitle"
+            @click.stop="toggleAccount"
+          >
+            <img
+              v-if="auth.user?.avatar && !avatarFailed"
+              class="admin-account-avatar admin-account-avatar--img"
+              :src="auth.user.avatar"
+              alt=""
+              @error="avatarFailed = true"
+            />
+            <span v-else class="admin-account-avatar">{{ initial }}</span>
+            <span class="admin-account-trigger__name">{{ auth.user?.username }}</span>
+            <AppIcon name="chevron-down" :size="13" class="admin-account-trigger__chevron" />
+          </button>
+
+          <div v-if="accountOpen" class="admin-account-menu" role="menu">
+            <div class="admin-account-menu__identity">
+              <strong>{{ auth.user?.username }}</strong>
+              <span>{{ auth.user?.email }}</span>
+            </div>
+            <div class="admin-account-menu__divider" />
+            <RouterLink class="admin-account-menu__item" to="/" role="menuitem" @click="accountOpen = false">
+              <AppIcon name="home" :size="16" />
+              <span>返回前台</span>
+            </RouterLink>
+            <button type="button" class="admin-account-menu__item admin-account-menu__item--danger" role="menuitem" @click="logout">
+              <AppIcon name="log-out" :size="16" />
+              <span>退出登录</span>
+            </button>
+          </div>
         </div>
-        <button type="button" class="admin-top-link" @click="logout">
-          <AppIcon name="log-out" :size="16" />
-          <span class="admin-top-link__text">退出</span>
-        </button>
       </div>
     </header>
 

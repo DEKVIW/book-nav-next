@@ -11,6 +11,7 @@ import { usePortalStore } from '@/shared/stores/portal'
 import { useToast } from '@/shared/composables/useToast'
 import AppIcon from '@/shared/ui/AppIcon.vue'
 import ThemeMenu from '@/shared/ui/ThemeMenu.vue'
+import PortalSearchDeck from '@/modules/portal/components/PortalSearchDeck.vue'
 import { iconForCategory } from '@/shared/icons/registry'
 import type { Category } from '@/shared/types/models'
 
@@ -19,14 +20,16 @@ const props = withDefaults(
     categories?: Category[]
     aiAvailable?: boolean
     useAi?: boolean
+    searchQuery?: string
   }>(),
-  { aiAvailable: false, useAi: false },
+  { aiAvailable: false, useAi: false, searchQuery: '' },
 )
 
 const emit = defineEmits<{
   selectSubcategory: [parentId: number, childId: number | 'root']
   search: [q: string]
   'update:useAi': [v: boolean]
+  'update:searchQuery': [value: string]
 }>()
 
 const auth = useAuthStore()
@@ -46,10 +49,11 @@ const STORAGE_SUBMENU = 'booknav_submenu_'
 /** Desktop: expanded labels | collapsed icon-only. Mobile open uses expanded labels in drawer. */
 const railExpanded = ref(true)
 const mobileOpen = ref(false)
-const searchInput = ref('')
 const activeCat = ref<number | null>(null)
 const expanded = ref<Set<number>>(new Set())
 const flyoutId = ref<number | null>(null)
+const accountOpen = ref(false)
+const avatarFailed = ref(false)
 /** 点击/编程滚动期间锁定选中态，避免 IntersectionObserver 在 smooth scroll 途中乱跳 */
 const activeLocked = ref(false)
 let unlockTimer: ReturnType<typeof setTimeout> | null = null
@@ -60,6 +64,19 @@ const aiOn = computed({
   get: () => props.useAi,
   set: (v: boolean) => emit('update:useAi', v),
 })
+const searchQuery = computed({
+  get: () => props.searchQuery,
+  set: (v: string) => emit('update:searchQuery', v),
+})
+const accountInitial = computed(() => auth.user?.username?.trim().slice(0, 1).toUpperCase() || '?')
+const accountTitle = computed(() => (auth.isLoggedIn ? auth.user?.username || '账户' : '登录'))
+
+watch(
+  () => auth.user?.avatar,
+  () => {
+    avatarFailed.value = false
+  },
+)
 
 /** Local root order for optimistic drag (admin only). */
 const localRootOrder = ref<Category[] | null>(null)
@@ -254,7 +271,7 @@ function lockActive(id: number) {
 function scrollToCategory(id: number, opts?: { closeOnMobile?: boolean }) {
   if (portal.searchResults) {
     portal.clearSearch()
-    searchInput.value = ''
+    searchQuery.value = ''
   }
   lockActive(id)
   const el = document.getElementById(`cat-${id}`)
@@ -289,23 +306,23 @@ function onRootAsUncategorized(cat: Category) {
   if (isMobile()) closeMobile()
 }
 
-function onSearch(e: Event) {
-  e.preventDefault()
-  const q = searchInput.value.trim()
-  if (!q) {
-    portal.clearSearch()
-    return
-  }
-  emit('search', q)
+function clearSearch() {
+  searchQuery.value = ''
+  portal.clearSearch()
 }
 
-function clearSearch() {
-  searchInput.value = ''
-  portal.clearSearch()
+function toggleAccount() {
+  accountOpen.value = !accountOpen.value
+}
+
+async function handleLogout() {
+  accountOpen.value = false
+  await auth.logout()
 }
 
 function onKey(e: KeyboardEvent) {
   if (e.key === 'Escape') {
+    accountOpen.value = false
     if (flyoutId.value != null) flyoutId.value = null
     else if (mobileOpen.value) closeMobile()
     else if (portal.searchResults) clearSearch()
@@ -313,8 +330,9 @@ function onKey(e: KeyboardEvent) {
 }
 
 function onDocClick(e: MouseEvent) {
-  if (flyoutId.value == null) return
   const t = e.target as HTMLElement | null
+  if (accountOpen.value && !t?.closest?.('.account-slot')) accountOpen.value = false
+  if (flyoutId.value == null) return
   if (t?.closest?.('.side-group')) return
   flyoutId.value = null
 }
@@ -438,39 +456,71 @@ defineExpose({
         <AppIcon :name="mobileOpen ? 'x' : 'menu'" :size="18" />
       </button>
 
-      <form class="search-slot" @submit="onSearch">
-        <div class="radar-search">
-          <AppIcon name="search" :size="16" class="radar-search__icon" />
-          <input
-            v-model="searchInput"
-            type="search"
-            class="radar-search__input"
-            placeholder="搜索网站标题、描述或链接…"
-            enterkeyhint="search"
-          />
-          <button v-if="searchInput" type="button" class="clear" aria-label="清除" @click="clearSearch">
-            <AppIcon name="x" :size="16" />
-          </button>
-        </div>
-      </form>
+      <div class="search-slot">
+        <PortalSearchDeck
+          v-model="searchQuery"
+          v-model:use-ai="aiOn"
+          :ai-available="aiAvailable"
+          @submit="(query) => emit('search', query)"
+          @clear="clearSearch"
+        />
+      </div>
 
       <div class="top-rail__actions">
-        <label v-if="aiAvailable" class="ai-toggle" title="启用 AI 智能搜索">
-          <input v-model="aiOn" type="checkbox" />
-          <span>AI</span>
-        </label>
         <ThemeMenu />
-        <template v-if="auth.isLoggedIn">
-          <span class="user-chip">
-            <span class="status-dot status-dot--ok" />
-            {{ auth.user?.username }}
-          </span>
-          <RouterLink v-if="auth.isAdmin" class="m-btn m-btn--primary" to="/admin">管理后台</RouterLink>
-          <button type="button" class="m-btn m-btn--ghost" @click="auth.logout()">退出</button>
-        </template>
-        <template v-else>
-          <RouterLink class="m-btn m-btn--ghost" to="/login">登录</RouterLink>
-        </template>
+        <div class="account-slot">
+          <RouterLink
+            v-if="!auth.isLoggedIn"
+            to="/login"
+            class="account-trigger"
+            :aria-label="accountTitle"
+            :title="accountTitle"
+          >
+            <AppIcon name="log-in" :size="18" />
+          </RouterLink>
+          <button
+            v-else
+            type="button"
+            class="account-trigger account-trigger--avatar"
+            :aria-label="accountTitle"
+            :aria-expanded="accountOpen"
+            aria-haspopup="menu"
+            :title="accountTitle"
+            @click.stop="toggleAccount"
+          >
+            <img
+              v-if="auth.user?.avatar && !avatarFailed"
+              :src="auth.user.avatar"
+              alt=""
+              class="account-avatar"
+              @error="avatarFailed = true"
+            />
+            <span v-else class="account-avatar account-avatar--initial">{{ accountInitial }}</span>
+            <AppIcon name="chevron-down" :size="12" class="account-trigger__chevron" />
+          </button>
+
+          <div v-if="auth.isLoggedIn && accountOpen" class="account-menu hull" role="menu">
+            <div class="account-menu__identity">
+              <strong>{{ auth.user?.username }}</strong>
+              <span>{{ auth.user?.email }}</span>
+            </div>
+            <div class="account-menu__divider" />
+            <RouterLink
+              v-if="auth.isAdmin"
+              to="/admin"
+              class="account-menu__item"
+              role="menuitem"
+              @click="accountOpen = false"
+            >
+              <AppIcon name="layout-dashboard" :size="16" />
+              <span>管理后台</span>
+            </RouterLink>
+            <button type="button" class="account-menu__item account-menu__item--danger" role="menuitem" @click="handleLogout">
+              <AppIcon name="log-out" :size="16" />
+              <span>退出登录</span>
+            </button>
+          </div>
+        </div>
       </div>
       <div class="scan-edge" aria-hidden="true" />
     </header>
@@ -695,91 +745,145 @@ defineExpose({
     max-width: 640px;
   }
 }
-.radar-search {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  height: 42px;
-  padding: 0 14px;
-  background: var(--bg-input);
-  border: 1px solid var(--stroke-dim);
-  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.45);
-  clip-path: polygon(8px 0, 100% 0, 100% calc(100% - 8px), calc(100% - 8px) 100%, 0 100%, 0 8px);
-  transition: border-color var(--dur-fast), box-shadow var(--dur-fast);
-}
-.radar-search:focus-within {
-  border-color: var(--energy);
-  box-shadow:
-    inset 0 1px 2px rgba(0, 0, 0, 0.4),
-    0 0 0 1px var(--energy-dim),
-    0 0 20px var(--energy-glow);
-}
-.radar-search__icon {
-  color: var(--energy);
-  opacity: 0.85;
-  flex-shrink: 0;
-}
-.radar-search__input {
-  flex: 1;
-  border: 0;
-  outline: 0;
-  background: transparent;
-  color: var(--text-primary);
-  font: inherit;
-  font-size: var(--text-sm);
-  min-width: 0;
-}
-.clear {
-  border: 0;
-  background: transparent;
-  color: var(--text-muted);
-  display: grid;
-  place-items: center;
-  padding: 2px;
-  border-radius: 4px;
-}
-.clear:hover {
-  color: var(--text-primary);
-}
-
 .top-rail__actions {
   display: flex;
   align-items: center;
   gap: var(--space-2);
   margin-left: auto;
 }
-.user-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  font-size: var(--text-xs);
-  color: var(--text-secondary);
-  font-family: var(--font-mono);
-  padding: 4px 10px;
-  border: 1px solid var(--stroke-dim);
-  background: var(--bg-inset);
-  clip-path: polygon(4px 0, 100% 0, 100% calc(100% - 4px), calc(100% - 4px) 100%, 0 100%, 0 4px);
+
+.account-slot {
+  position: relative;
+  z-index: 4;
+  flex-shrink: 0;
 }
-.ai-toggle {
+
+.account-trigger {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  font-size: 11px;
+  justify-content: center;
+  gap: 5px;
+  width: 38px;
+  height: 36px;
+  padding: 0;
+  border: 1px solid var(--stroke-dim);
+  background: color-mix(in srgb, var(--bg-panel-solid) 78%, transparent);
+  color: var(--text-secondary);
+  text-decoration: none;
+  cursor: pointer;
+  clip-path: polygon(5px 0, 100% 0, 100% calc(100% - 5px), calc(100% - 5px) 100%, 0 100%, 0 5px);
+  transition: border-color var(--dur-fast), color var(--dur-fast), background var(--dur-fast), box-shadow var(--dur-fast);
+}
+
+.account-trigger:hover,
+.account-trigger[aria-expanded='true'] {
+  border-color: var(--stroke-bright);
+  background: color-mix(in srgb, var(--energy) 8%, var(--bg-panel-solid));
+  color: var(--text-primary);
+}
+
+.account-trigger--avatar {
+  width: auto;
+  min-width: 52px;
+  padding: 0 6px 0 4px;
+}
+
+.account-avatar {
+  display: block;
+  width: 26px;
+  height: 26px;
+  border: 1px solid var(--energy-dim);
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+.account-avatar--initial {
+  display: grid;
+  place-items: center;
+  background: color-mix(in srgb, var(--energy) 18%, var(--bg-panel-solid));
+  color: var(--energy);
   font-family: var(--font-display);
-  letter-spacing: 0.08em;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.account-trigger__chevron {
+  transition: transform var(--dur-fast);
+}
+
+.account-trigger[aria-expanded='true'] .account-trigger__chevron {
+  transform: rotate(180deg);
+}
+
+.account-menu {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  width: min(260px, calc(100vw - 24px));
+  padding: 8px;
+  background: var(--bg-panel-elevated);
+  box-shadow: var(--panel-shadow), 0 14px 34px rgba(15, 40, 54, 0.2);
+}
+
+.account-menu__identity {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  padding: 6px 8px 9px;
+}
+
+.account-menu__identity strong,
+.account-menu__identity span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.account-menu__identity strong {
+  color: var(--text-primary);
+  font-size: var(--text-sm);
+  font-weight: 600;
+}
+
+.account-menu__identity span {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.account-menu__divider {
+  height: 1px;
+  margin: 0 0 5px;
+  background: var(--stroke-dim);
+}
+
+.account-menu__item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 40px;
+  padding: 7px 8px;
+  border: 1px solid transparent;
+  background: transparent;
   color: var(--text-secondary);
-  padding: 4px 8px;
-  border: 1px solid var(--stroke-dim);
-  background: var(--bg-inset);
-  user-select: none;
+  font: inherit;
+  font-size: var(--text-sm);
+  text-align: left;
+  text-decoration: none;
+  cursor: pointer;
 }
-.ai-toggle:has(input:checked) {
-  color: var(--magenta);
-  border-color: color-mix(in srgb, var(--magenta) 50%, var(--stroke-dim));
-  box-shadow: 0 0 12px rgba(179, 136, 255, 0.2);
+
+.account-menu__item:hover {
+  border-color: var(--energy-dim);
+  background: color-mix(in srgb, var(--energy) 8%, transparent);
+  color: var(--text-primary);
 }
-.ai-toggle input {
-  accent-color: var(--magenta);
+
+.account-menu__item--danger:hover {
+  border-color: color-mix(in srgb, var(--danger) 42%, var(--stroke-dim));
+  background: color-mix(in srgb, var(--danger) 8%, transparent);
+  color: var(--danger);
 }
 
 /* —— Icon rail：通顶，填满左上角（顶栏只在内容区，侧栏占满左侧全高） —— */
@@ -1238,9 +1342,7 @@ defineExpose({
     display: none !important;
   }
   .search-slot {
-    max-width: none;
-    flex: 1;
-    min-width: 0;
+    display: none;
   }
   .viewport {
     padding: var(--space-4) var(--space-3) var(--space-8);
@@ -1248,18 +1350,6 @@ defineExpose({
   .top-rail {
     gap: var(--space-2);
     padding: 0 var(--space-3);
-  }
-  .user-chip {
-    display: none;
-  }
-}
-
-@media (max-width: 480px) {
-  .ai-toggle span {
-    display: none;
-  }
-  .top-rail__actions .m-btn {
-    padding-inline: 10px;
   }
 }
 </style>

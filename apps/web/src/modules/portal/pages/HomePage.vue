@@ -14,6 +14,7 @@ import WebsiteFormModal from '@/modules/portal/components/WebsiteFormModal.vue'
 import DuplicateDialog from '@/modules/portal/components/DuplicateDialog.vue'
 import AnnouncementModal from '@/modules/portal/components/AnnouncementModal.vue'
 import SearchShareDialog from '@/modules/portal/components/SearchShareDialog.vue'
+import PortalSearchDeck from '@/modules/portal/components/PortalSearchDeck.vue'
 import AppIcon from '@/shared/ui/AppIcon.vue'
 import { iconForCategory } from '@/shared/icons/registry'
 import { useAuthStore } from '@/shared/stores/auth'
@@ -46,6 +47,7 @@ const dupSite = ref<Website | null>(null)
 const pendingForceUrl = ref('')
 const dragState = ref<{ categoryId: number; draggedId: number; ids: number[] } | null>(null)
 const showTop = ref(false)
+const searchInput = ref('')
 const useAI = ref(false)
 const shareDialogOpen = ref(false)
 const locatedSiteId = ref<number | null>(null)
@@ -655,12 +657,18 @@ async function onFormEnhance(payload: { url: string; title: string; description:
 }
 
 async function onSearch(q: string) {
+  searchInput.value = q
   try {
     clearLocatedSite()
     await portal.search(q, useAI.value && aiAvailable.value)
   } catch (err: unknown) {
     toast.error(err instanceof Error ? err.message : '搜索失败')
   }
+}
+
+function clearSearch() {
+  searchInput.value = ''
+  portal.clearSearch()
 }
 
 function openSearchShare() {
@@ -679,6 +687,7 @@ function scrollTop() {
     :categories="displayCategories"
     :ai-available="aiAvailable"
     v-model:use-ai="useAI"
+    v-model:search-query="searchInput"
     @search="onSearch"
     @select-subcategory="onSidebarSubcategory"
   >
@@ -694,6 +703,15 @@ function scrollTop() {
     </div>
 
     <template v-else-if="!portal.loading || portal.categories.length">
+      <PortalSearchDeck
+        v-model="searchInput"
+        v-model:use-ai="useAI"
+        :ai-available="aiAvailable"
+        class="mobile-search-deck"
+        @submit="onSearch"
+        @clear="clearSearch"
+      />
+
       <!-- 搜索结果：searchResults !== null 即进入（含空数组 loading，避免回车后无反应） -->
       <section v-if="portal.searchResults !== null" class="search-layer">
         <header class="search-head">
@@ -755,7 +773,7 @@ function scrollTop() {
             <button
               type="button"
               class="m-btn m-btn--ghost search-head__back"
-              @click="portal.clearSearch()"
+              @click="clearSearch"
             >
               返回导航
             </button>
@@ -942,6 +960,17 @@ function scrollTop() {
 </template>
 
 <style scoped>
+.mobile-search-deck {
+  display: none;
+}
+
+@media (max-width: 899px) {
+  .mobile-search-deck {
+    display: flex;
+    margin-bottom: var(--space-5);
+  }
+}
+
 /* Search result bay — structured header (not a single jammed flex row) */
 .search-layer {
   margin-bottom: 36px;
