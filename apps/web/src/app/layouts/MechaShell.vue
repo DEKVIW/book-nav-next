@@ -476,7 +476,7 @@ defineExpose({
             :aria-label="accountTitle"
             :title="accountTitle"
           >
-            <AppIcon name="log-in" :size="18" />
+            <AppIcon name="user-round" :size="18" />
           </RouterLink>
           <button
             v-else
