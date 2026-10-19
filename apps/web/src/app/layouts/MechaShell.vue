@@ -445,16 +445,25 @@ defineExpose({
     }"
   >
     <header class="top-rail">
-      <!-- 仅移动端：打开侧栏抽屉。桌面用侧栏底部折叠钮，不占顶栏 -->
-      <button
-        type="button"
-        class="m-btn m-btn--ghost m-btn--icon top-rail__menu"
-        :aria-label="mobileOpen ? '关闭菜单' : '打开菜单'"
-        :aria-expanded="mobileOpen"
-        @click="toggleRail"
+      <RouterLink
+        to="/"
+        class="mobile-brand"
+        :title="portal.settings?.site_name || 'BookNav'"
+        :aria-label="portal.settings?.site_name || 'BookNav'"
+        @click="clearSearch"
       >
-        <AppIcon :name="mobileOpen ? 'x' : 'menu'" :size="18" />
-      </button>
+        <span class="side-brand__logo mobile-brand__logo">
+          <img
+            v-if="brandImage && !brandImageFailed"
+            :src="brandImage"
+            alt=""
+            class="side-brand__img"
+            @error="brandImageFailed = true"
+          />
+          <AppIcon v-else name="cpu" :size="18" />
+        </span>
+        <span class="mobile-brand__text">{{ portal.settings?.site_name || 'BookNav' }}</span>
+      </RouterLink>
 
       <div class="search-slot">
         <PortalSearchDeck
@@ -468,6 +477,16 @@ defineExpose({
 
       <div class="top-rail__actions">
         <ThemeMenu />
+        <!-- 仅移动端：打开左侧分类抽屉。桌面用侧栏底部折叠钮 -->
+        <button
+          type="button"
+          class="m-btn m-btn--ghost m-btn--icon top-rail__menu"
+          :aria-label="mobileOpen ? '关闭菜单' : '打开菜单'"
+          :aria-expanded="mobileOpen"
+          @click="toggleRail"
+        >
+          <AppIcon :name="mobileOpen ? 'x' : 'menu'" :size="18" />
+        </button>
         <div class="account-slot">
           <RouterLink
             v-if="!auth.isLoggedIn"
@@ -728,6 +747,10 @@ defineExpose({
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
 }
 
+.mobile-brand {
+  display: none;
+}
+
 /* 桌面：侧栏底栏折叠即可，顶栏不放汉堡，避免左侧空一块 */
 .top-rail__menu {
   display: none;
@@ -959,7 +982,7 @@ defineExpose({
 .side-brand {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   min-width: 0;
   flex: 1;
   text-decoration: none;
@@ -977,18 +1000,18 @@ defineExpose({
   background: rgba(61, 231, 255, 0.06);
 }
 .side-brand__logo {
-  width: 40px;
-  height: 40px;
+  width: 32px;
+  height: 32px;
   flex-shrink: 0;
   display: grid;
   place-items: center;
   color: var(--bg-void);
   background: linear-gradient(145deg, #a8f8ff 0%, var(--energy) 45%, #1a7a98 100%);
-  border-radius: 12px;
+  border-radius: 9px;
   overflow: hidden;
   box-shadow:
     0 0 0 1px rgba(61, 231, 255, 0.35),
-    0 0 18px rgba(61, 231, 255, 0.22);
+    0 0 14px rgba(61, 231, 255, 0.18);
 }
 .side-brand__img {
   width: 100%;
@@ -999,8 +1022,8 @@ defineExpose({
 .side-brand__text {
   font-family: var(--font-display);
   font-weight: 700;
-  letter-spacing: 0.06em;
-  font-size: 0.9rem;
+  letter-spacing: 0.04em;
+  font-size: 0.875rem;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1326,6 +1349,7 @@ defineExpose({
   }
   .side-rail {
     width: min(var(--sidebar-width), 86vw) !important;
+    z-index: calc(var(--z-rail) + 1);
     transform: translateX(-105%);
     transition: transform var(--dur-base) var(--ease-hydraulic);
     overflow: hidden;
@@ -1337,6 +1361,46 @@ defineExpose({
     opacity: 1 !important;
     width: auto !important;
     max-width: 160px !important;
+  }
+  .side-brand {
+    flex: 1 !important;
+    min-width: 0 !important;
+    justify-content: flex-start !important;
+    padding: 4px !important;
+  }
+  .side-brand__logo {
+    width: 32px !important;
+    height: 32px !important;
+  }
+  .mobile-brand {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    flex: 1;
+    min-width: 0;
+    max-width: none;
+    color: var(--text-primary);
+    text-decoration: none;
+  }
+  .mobile-brand__logo {
+    width: 32px;
+    height: 32px;
+    border-radius: 9px;
+    box-shadow:
+      0 0 0 1px rgba(61, 231, 255, 0.3),
+      0 0 12px rgba(61, 231, 255, 0.18);
+  }
+  .mobile-brand__text {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    color: var(--text-primary);
+    font-family: var(--font-display);
+    font-size: 0.875rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
   .side-rail__head {
     justify-content: flex-start !important;
@@ -1372,6 +1436,9 @@ defineExpose({
   .top-rail {
     gap: var(--space-2);
     padding: 0 var(--space-3);
+  }
+  .top-rail__actions {
+    gap: var(--space-1);
   }
 }
 </style>
