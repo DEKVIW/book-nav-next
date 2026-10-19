@@ -146,7 +146,6 @@ onBeforeUnmount(() => {
   gap: 14px;
   align-items: center; /* 图标与文字垂直居中 */
   padding: 14px 16px;
-  padding-right: 78px; /* reserve right for art */
   text-decoration: none;
   color: inherit;
   cursor: pointer;
@@ -320,6 +319,45 @@ onBeforeUnmount(() => {
   overflow: hidden;
   text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
 }
+
+@media (max-width: 899px) {
+  .site-card {
+    height: auto;
+    min-height: 80px;
+    max-height: none;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 12px;
+  }
+
+  .site-card__icon {
+    position: relative;
+    width: 40px;
+    height: 40px;
+  }
+
+  .site-card__body {
+    width: auto;
+    padding-top: 0;
+  }
+
+  .site-card__title {
+    min-width: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .site-card__desc {
+    display: block;
+    min-width: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+}
+
 .badge {
   font-size: 9px;
   font-family: var(--font-mono);

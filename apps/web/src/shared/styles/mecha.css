@@ -100,9 +100,26 @@ html[data-theme='light'] .site-card:hover .site-card__art {
 html[data-theme='light'] .site-card__scrim {
   background: linear-gradient(
     90deg,
-    rgba(255, 255, 255, 0.72) 0%,
-    rgba(255, 255, 255, 0.32) 48%,
-    transparent 76%
+    rgba(255, 255, 255, 0.76) 0%,
+    rgba(255, 255, 255, 0.58) 58%,
+    rgba(255, 255, 255, 0.38) 100%
+  );
+}
+
+html:not([data-theme='light']) .site-card__art {
+  opacity: 0.48;
+}
+
+html:not([data-theme='light']) .site-card:hover .site-card__art {
+  opacity: 0.66;
+}
+
+html:not([data-theme='light']) .site-card__scrim {
+  background: linear-gradient(
+    90deg,
+    rgba(8, 14, 22, 0.72) 0%,
+    rgba(8, 14, 22, 0.56) 58%,
+    rgba(8, 14, 22, 0.42) 100%
   );
 }
 

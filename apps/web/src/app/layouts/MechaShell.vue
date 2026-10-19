@@ -675,8 +675,8 @@ defineExpose({
         <button
           type="button"
           class="side-rail__collapse"
-          :title="railExpanded ? '折叠为图标' : '展开侧栏'"
-          :aria-label="railExpanded ? '折叠为图标' : '展开侧栏'"
+          :title="isMobile() ? '收起菜单' : railExpanded ? '折叠为图标' : '展开侧栏'"
+          :aria-label="isMobile() ? '收起菜单' : railExpanded ? '折叠为图标' : '展开侧栏'"
           @click="
             () => {
               if (isMobile()) closeMobile()
@@ -689,7 +689,7 @@ defineExpose({
           "
         >
           <AppIcon :name="railExpanded || isMobile() ? 'chevrons-left' : 'chevrons-right'" :size="18" />
-          <span class="side-rail__collapse-label">{{ railExpanded ? '收起' : '展开' }}</span>
+          <span class="side-rail__collapse-label">{{ isMobile() ? '收起' : railExpanded ? '收起' : '展开' }}</span>
         </button>
       </div>
     </aside>
@@ -927,6 +927,28 @@ defineExpose({
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.04), transparent 60%),
     color-mix(in srgb, var(--bg-hull) 97%, transparent);
+}
+
+:global(html[data-theme='light'] .top-rail) {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.48), transparent 60%),
+    var(--bg-hull);
+  border-bottom-color: rgba(45, 79, 96, 0.14);
+  box-shadow: 0 8px 24px rgba(38, 72, 86, 0.08);
+}
+:global(html[data-theme='light'] .side-rail) {
+  border-right-color: rgba(45, 79, 96, 0.12);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.34), transparent 28%),
+    linear-gradient(90deg, rgba(8, 126, 152, 0.025), transparent 50%),
+    var(--bg-hull);
+  box-shadow: 4px 0 20px rgba(38, 72, 86, 0.06);
+}
+:global(html[data-theme='light'] .side-rail__head) {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.48), transparent 60%),
+    var(--bg-hull);
+  border-bottom-color: rgba(45, 79, 96, 0.14);
 }
 .shell--rail-expanded .side-rail__head {
   justify-content: flex-start;

@@ -967,6 +967,9 @@ function scrollTop() {
 @media (max-width: 899px) {
   .mobile-search-deck {
     display: flex;
+    position: sticky;
+    top: var(--top-rail-height);
+    z-index: 20;
     margin-bottom: var(--space-5);
   }
 }
@@ -1144,6 +1147,22 @@ function scrollTop() {
   align-items: stretch;
   gap: 14px;
 }
+
+@media (max-width: 899px) {
+  .card-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-auto-rows: auto;
+    align-items: start;
+    gap: 10px;
+  }
+}
+
+@media (max-width: 360px) {
+  .card-grid {
+    gap: 8px;
+  }
+}
+
 .empty-hint {
   color: var(--text-muted);
   font-size: var(--text-sm);
