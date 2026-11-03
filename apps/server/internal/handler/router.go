@@ -48,7 +48,7 @@ func NewRouter(d Deps) http.Handler {
 	}
 	r.Use(cors.Handler(cors.Options{
 		AllowedOrigins:   origins,
-		AllowedMethods:   []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
+		AllowedMethods:   []string{"GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
 		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "X-CSRF-Token", "X-Request-ID"},
 		ExposedHeaders:   []string{"X-Request-ID"},
 		AllowCredentials: true,
@@ -61,7 +61,8 @@ func NewRouter(d Deps) http.Handler {
 	healthH := health.New()
 	// ready checks DB
 	r.Get("/healthz", healthH.Live)
-	r.Get("/readyz", func(w http.ResponseWriter, r *http.Request) {
+	r.Head("/healthz", healthH.Live)
+	readyH := func(w http.ResponseWriter, r *http.Request) {
 		if d.DB != nil {
 			if err := d.DB.Ping(); err != nil {
 				response.Fail(w, http.StatusServiceUnavailable, "INTERNAL", "db not ready")
@@ -69,8 +70,11 @@ func NewRouter(d Deps) http.Handler {
 			}
 		}
 		healthH.Ready(w, r)
-	})
+	}
+	r.Get("/readyz", readyH)
+	r.Head("/readyz", readyH)
 	r.Get("/version", healthH.Version)
+	r.Head("/version", healthH.Version)
 
 	// uploaded media
 	mediaDir := filepath.Join(cfg.DataDir, "uploads")
@@ -88,7 +92,9 @@ func NewRouter(d Deps) http.Handler {
 		api.Use(authMW.CSRF)
 
 		api.Get("/health", healthH.Live)
+		api.Head("/health", healthH.Live)
 		api.Get("/version", healthH.Version)
+		api.Head("/version", healthH.Version)
 		api.Get("/", func(w http.ResponseWriter, r *http.Request) {
 			response.OK(w, map[string]any{"name": "BookNav API", "version": "v1"})
 		})
@@ -237,7 +243,7 @@ func NewRouter(d Deps) http.Handler {
 
 func mountSPA(r chi.Router, staticDir string) {
 	fileServer := http.FileServer(http.Dir(staticDir))
-	r.Get("/*", func(w http.ResponseWriter, req *http.Request) {
+	serveSPA := func(w http.ResponseWriter, req *http.Request) {
 		upath := path.Clean(req.URL.Path)
 		if strings.HasPrefix(upath, "/api") || strings.HasPrefix(upath, "/media") {
 			http.NotFound(w, req)
@@ -253,5 +259,7 @@ func mountSPA(r chi.Router, staticDir string) {
 			return
 		}
 		http.ServeFile(w, req, filepath.Join(staticDir, "index.html"))
-	})
+	}
+	r.Get("/*", serveSPA)
+	r.Head("/*", serveSPA)
 }
