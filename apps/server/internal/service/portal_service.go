@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"sort"
 
 	"github.com/booknav/book-nav/apps/server/internal/domain"
 	"github.com/booknav/book-nav/apps/server/internal/pkg/apperr"
@@ -49,12 +50,11 @@ func (s *PortalService) Home(ctx context.Context, user *domain.User) (*domain.Ho
 	if err != nil {
 		return nil, err
 	}
-	viewersCache := map[int64][]int64{}
-	for i := range allSites {
-		vids, _ := s.websites.ListViewers(ctx, allSites[i].ID)
-		viewersCache[allSites[i].ID] = vids
-		allSites[i].ViewerIDs = vids
+	websiteIDs := make([]int64, 0, len(allSites))
+	for _, site := range allSites {
+		websiteIDs = append(websiteIDs, site.ID)
 	}
+	viewersCache, _ := s.websites.ListViewersByWebsiteIDs(ctx, websiteIDs)
 
 	filter := func(list []domain.Website) []domain.Website {
 		var out []domain.Website
@@ -73,6 +73,21 @@ func (s *PortalService) Home(ctx context.Context, user *domain.User) (*domain.Ho
 		}
 		byCat[*w.CategoryID] = append(byCat[*w.CategoryID], w)
 	}
+	for categoryID := range byCat {
+		sort.SliceStable(byCat[categoryID], func(i, j int) bool {
+			left, right := byCat[categoryID][i], byCat[categoryID][j]
+			if left.SortOrder != right.SortOrder {
+				return left.SortOrder > right.SortOrder
+			}
+			if !left.CreatedAt.Equal(right.CreatedAt) {
+				return left.CreatedAt.Before(right.CreatedAt)
+			}
+			if left.Views != right.Views {
+				return left.Views > right.Views
+			}
+			return left.ID < right.ID
+		})
+	}
 
 	// sort already from ListAll? not by sort_order fully; re-sort per cat via repo would be better but OK for MVP
 	// use ListByCategory for display order
@@ -81,18 +96,11 @@ func (s *PortalService) Home(ctx context.Context, user *domain.User) (*domain.Ho
 		children := childrenMap[root.ID]
 		// attach counts and websites
 		direct := byCat[root.ID]
-		// ensure ordered
-		if ordered, err := s.websites.ListByCategory(ctx, &root.ID, 10000); err == nil {
-			direct = filter(ordered)
-		}
 		root.DirectCount = len(direct)
 		childrenTotal := 0
 		var childDTOs []domain.Category
 		for _, ch := range children {
 			chSites := byCat[ch.ID]
-			if ordered, err := s.websites.ListByCategory(ctx, &ch.ID, 10000); err == nil {
-				chSites = filter(ordered)
-			}
 			ch.WebsiteCount = len(chSites)
 			ch.DirectCount = len(chSites)
 			childrenTotal += ch.WebsiteCount
@@ -112,9 +120,6 @@ func (s *PortalService) Home(ctx context.Context, user *domain.User) (*domain.Ho
 				// show first child websites
 				first := childDTOs[0]
 				sites := byCat[first.ID]
-				if ordered, err := s.websites.ListByCategory(ctx, &first.ID, limit); err == nil {
-					sites = filter(ordered)
-				}
 				if len(sites) > limit {
 					sites = sites[:limit]
 				}

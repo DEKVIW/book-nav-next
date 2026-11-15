@@ -429,6 +429,38 @@ func (r *WebsiteRepo) ListViewers(ctx context.Context, websiteID int64) ([]int64
 	return ids, rows.Err()
 }
 
+func (r *WebsiteRepo) ListViewersByWebsiteIDs(ctx context.Context, websiteIDs []int64) (map[int64][]int64, error) {
+	viewers := make(map[int64][]int64, len(websiteIDs))
+	if len(websiteIDs) == 0 {
+		return viewers, nil
+	}
+
+	placeholders := make([]string, len(websiteIDs))
+	args := make([]any, len(websiteIDs))
+	for i, id := range websiteIDs {
+		placeholders[i] = "?"
+		args[i] = id
+	}
+	rows, err := r.db.QueryContext(ctx, `
+SELECT website_id, user_id
+FROM website_viewers
+WHERE website_id IN (`+strings.Join(placeholders, ",")+`)
+ORDER BY website_id ASC, user_id ASC`, args...)
+	if err != nil {
+		return viewers, err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var websiteID, userID int64
+		if err := rows.Scan(&websiteID, &userID); err != nil {
+			return viewers, err
+		}
+		viewers[websiteID] = append(viewers[websiteID], userID)
+	}
+	return viewers, rows.Err()
+}
+
 func (r *WebsiteRepo) ReplaceViewers(ctx context.Context, websiteID int64, userIDs []int64) error {
 	tx, err := r.db.BeginTx(ctx, nil)
 	if err != nil {
