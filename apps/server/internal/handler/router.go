@@ -41,6 +41,7 @@ func NewRouter(d Deps) http.Handler {
 	if cfg.EnableAccessLog {
 		r.Use(middleware.AccessLog)
 	}
+	r.Use(chimw.Compress(5))
 
 	origins := cfg.CORSOrigins
 	if len(origins) == 0 {
